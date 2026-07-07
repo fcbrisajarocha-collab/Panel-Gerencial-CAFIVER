@@ -221,6 +221,26 @@ tr:hover td{background:var(--bg)}
       <span id="period-label" style="font-size:12px;color:var(--tx3);margin-left:4px"></span>
     </div>
 
+    <!-- FILTRO POR PLANTA -->
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:16px;flex-wrap:wrap">
+      <span style="font-size:11px;font-weight:600;color:var(--tx3);letter-spacing:.4px;text-transform:uppercase">Filtrar planta:</span>
+      <button class="dp-btn active" id="pf-todas" onclick="setPlantFilter('todas')" style="padding:6px 14px">
+        🏭 Todas
+      </button>
+      <button class="dp-btn" id="pf-desc" onclick="setPlantFilter('desc')" style="padding:6px 14px;border-left:3px solid #0ea5e9">
+        Descafeinado
+      </button>
+      <button class="dp-btn" id="pf-env" onclick="setPlantFilter('env')" style="padding:6px 14px;border-left:3px solid #f59e0b">
+        Envasado
+      </button>
+      <button class="dp-btn" id="pf-pse" onclick="setPlantFilter('pse')" style="padding:6px 14px;border-left:3px solid #8b5cf6">
+        PSE
+      </button>
+      <button class="dp-btn" id="pf-mant" onclick="setPlantFilter('mant')" style="padding:6px 14px;border-left:3px solid #10b981">
+        Mantenimiento
+      </button>
+    </div>
+
     <!-- CARDS POR PLANTA -->
     <div class="sec-hd">Resumen por Planta</div>
     <div class="plant-cards" id="plant-cards">
@@ -523,11 +543,28 @@ function cargarTodo() {
 }
 
 /* ── RENDER PRINCIPAL ── */
-function render() {
-  const fecha = document.getElementById('fecha-rep').value || todayStr();
-  const period = _periodActive;
+let _plantFilter = 'todas';
 
-  // Filtrar sesiones por período en cada planta
+function setPlantFilter(f) {
+  _plantFilter = f;
+  ['todas','desc','env','pse','mant'].forEach(k => {
+    const btn = document.getElementById('pf-'+k);
+    if (btn) btn.classList.toggle('active', k===f);
+  });
+  render();
+}
+
+function getPlantasActivas() {
+  if (_plantFilter === 'todas') return PLANTAS;
+  return PLANTAS.filter(p => p.id === _plantFilter);
+}
+
+function render() {
+  const fecha  = document.getElementById('fecha-rep').value || todayStr();
+  const period = _periodActive;
+  const plantasVer = getPlantasActivas();
+
+  // Construir plantData SOLO de las plantas visibles
   const plantData = PLANTAS.map(p => {
     const raw = G[p.id];
     const sessions = (raw.sessions||[]).filter(s => isInPeriod(s.date, fecha, period));
@@ -535,15 +572,20 @@ function render() {
     return { ...p, sessions, stats, catalog: raw.catalog||[], loaded: raw.loaded, error: raw.error };
   });
 
-  renderPlantCards(plantData);
-  renderKPIs(plantData);
-  renderChartPlants(plantData);
-  renderIncPie(plantData);
+  // Para renders: filtrar por planta activa
+  const plantDataFilt = plantData.filter(p => _plantFilter==='todas' || p.id===_plantFilter);
+
+  renderPlantCards(plantDataFilt);
+  renderKPIs(plantDataFilt);
+  renderChartPlants(plantDataFilt);
+  renderIncPie(plantDataFilt);
   renderTrend();
-  renderIncRow(plantData);
-  renderSesTable(plantData);
-  renderTopColaboradores(plantData);
-  document.getElementById('period-label').textContent = getPeriodLabel(fecha, period);
+  renderIncRow(plantDataFilt);
+  renderSesTable(plantDataFilt);
+  renderTopColaboradores(plantDataFilt);
+  document.getElementById('period-label').textContent =
+    getPeriodLabel(fecha, period) +
+    (_plantFilter!=='todas' ? ' · ' + (PLANTAS.find(p=>p.id===_plantFilter)?.nombre||'') : '');
 }
 
 function getPeriodLabel(fecha, period) {
@@ -762,20 +804,93 @@ function renderTopColaboradores(pd) {
 
 /* ── EXPORTAR EXCEL ── */
 function exportarExcel() {
-  const fecha = document.getElementById('fecha-rep').value || todayStr();
-  const rows = [['Planta','Fecha','Turno','Supervisor','Equipo','Presentes','Faltas','Retardos','Permisos','Incap.','Castigos','% Asist.']];
-  PLANTAS.forEach(p => {
+  const fecha    = document.getElementById('fecha-rep').value || todayStr();
+  const periodo  = document.getElementById('period-label').textContent || fecha;
+  const plantas  = getPlantasActivas();
+  const sep      = ['']; // fila separadora
+
+  // ══ HOJA 1: Resumen por sesión ══
+  const s1 = [
+    ['CAFIVER · REPORTE GERENCIAL DE ASISTENCIA'],
+    ['Período:', periodo],
+    ['Generado:', new Date().toLocaleString('es-MX')],
+    ['Plantas:', plantas.map(p=>p.nombre).join(', ')],
+    sep,
+    ['RESUMEN POR SESIÓN'],
+    ['Planta','Fecha','Turno','Supervisor','Área','Equipo','Presentes','Faltas','Retardos','Permisos','Incap.','Castigos','Sin capturar','% Asistencia'],
+  ];
+  plantas.forEach(p => {
     const sFilter = (G[p.id]?.sessions||[]).filter(s=>isInPeriod(s.date,fecha,_periodActive));
-    sFilter.forEach(s => {
+    sFilter.sort((a,b)=>a.date.localeCompare(b.date)).forEach(s => {
       const m = calcAsist([s]);
-      rows.push([p.nombre,s.date,TURN_NAME[s.turno]||s.turno,s.supervisor,m.total,m.si,m.faltas,m.retardos,m.permisos,m.incap,m.castigos,m.pct+'%']);
+      const sinCapt = (s.team||[]).filter(t=>!t.status||t.status==='').length;
+      s1.push([p.nombre, s.date, TURN_NAME[s.turno]||'T'+s.turno, s.supervisor, s.area||'',
+               m.total, m.si, m.faltas, m.retardos, m.permisos, m.incap, m.castigos, sinCapt, m.pct+'%']);
     });
   });
-  const csv = rows.map(r=>r.map(c=>`"${String(c).replace(/"/g,'""')}"`).join(',')).join('\n');
+
+  // ══ HOJA 2: Detalle por colaborador con incidencias ══
+  const s2 = [
+    sep,
+    ['DETALLE DE INCIDENCIAS POR COLABORADOR'],
+    ['Planta','# Control','Nombre','Puesto','Turno','Fecha','Supervisor','Estado','Observaciones','Tipo Incidencia'],
+  ];
+  plantas.forEach(p => {
+    const catalog = G[p.id]?.catalog||[];
+    const sFilter = (G[p.id]?.sessions||[]).filter(s=>isInPeriod(s.date,fecha,_periodActive));
+    sFilter.sort((a,b)=>a.date.localeCompare(b.date)).forEach(s => {
+      (s.team||[]).forEach(m => {
+        if (!m.status || m.status==='SI') return; // Solo incidencias
+        const cat = catalog.find(x=>x.id===m.catId);
+        // Determinar tipo
+        let tipo = '—';
+        Object.entries(INC_TYPES).forEach(([k,t])=>{ if(t.states.includes(m.status)) tipo=t.label; });
+        s2.push([
+          p.nombre, cat?.ctrl||'—', cat?.name||'—', cat?.puesto||'—',
+          TURN_NAME[s.turno]||'T'+s.turno, s.date, s.supervisor,
+          m.status, m.obs||'', tipo
+        ]);
+      });
+    });
+  });
+
+  // ══ HOJA 3: Resumen de incidencias por persona ══
+  const s3 = [
+    sep,
+    ['RESUMEN DE INCIDENCIAS ACUMULADAS POR COLABORADOR'],
+    ['Planta','# Control','Nombre','Puesto','Faltas','Retardos','Permisos','Incapacidades','Castigos','Total Incidencias','Total Presencias','Total Registros'],
+  ];
+  plantas.forEach(p => {
+    const catalog = G[p.id]?.catalog||[];
+    const sFilter = (G[p.id]?.sessions||[]).filter(s=>isInPeriod(s.date,fecha,_periodActive));
+    const byP = {};
+    sFilter.forEach(s => {
+      (s.team||[]).forEach(m => {
+        const cat = catalog.find(x=>x.id===m.catId);
+        if (!byP[m.catId]) byP[m.catId]={ctrl:cat?.ctrl||'—',name:cat?.name||'—',puesto:cat?.puesto||'—',falta:0,retardo:0,permiso:0,incap:0,castigo:0,si:0,total:0};
+        byP[m.catId].total++;
+        if (m.status==='SI') byP[m.catId].si++;
+        Object.entries(INC_TYPES).forEach(([k,t])=>{ if(t.states.includes(m.status)) byP[m.catId][k]++; });
+      });
+    });
+    Object.values(byP).sort((a,b)=>(b.falta+b.retardo+b.permiso+b.incap+b.castigo)-(a.falta+a.retardo+a.permiso+a.incap+a.castigo)).forEach(x=>{
+      const totalInc = x.falta+x.retardo+x.permiso+x.incap+x.castigo;
+      s3.push([p.nombre, x.ctrl, x.name, x.puesto, x.falta, x.retardo, x.permiso, x.incap, x.castigo, totalInc, x.si, x.total]);
+    });
+  });
+
+  // Combinar todas las hojas en un CSV separado por sección
+  const allRows = [...s1, ...s2, ...s3];
+  const csv = allRows.map(r=>Array.isArray(r)&&r[0]===''
+    ? ''
+    : (Array.isArray(r) ? r.map(v=>`"${String(v===undefined?'':v).replace(/"/g,'""')}"`).join(',') : '')
+  ).join('\n');
+
   const blob = new Blob(['\ufeff'+csv],{type:'text/csv;charset=utf-8'});
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
-  a.download = `Reporte_Gerencial_CAFIVER_${fecha}.csv`;
+  const pfx = _plantFilter!=='todas' ? (PLANTAS.find(p=>p.id===_plantFilter)?.nombre||'') : 'Todas';
+  a.download = 'Reporte_Gerencial_CAFIVER_'+pfx+'_'+fecha+'.csv';
   a.click();
 }
 
