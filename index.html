@@ -72,7 +72,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--tx);min-h
 .dp-btn.active{background:#eff6ff;color:var(--acc);border-color:#bfdbfe}
 
 /* ── PLANT CARDS ROW ── */
-.plant-cards{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:20px}
+.plant-cards{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:20px}
 .plant-card{background:#fff;border-radius:14px;padding:18px;border:1px solid var(--brd);border-top:4px solid var(--pc)}
 .pc-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
 .pc-name{font-size:11px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:var(--pc)}
@@ -127,7 +127,7 @@ tr:hover td{background:var(--bg)}
 
 /* ── RESPONSIVE ── */
 @media(max-width:900px){
-  .plant-cards{grid-template-columns:repeat(2,1fr)}
+  .plant-cards{grid-template-columns:repeat(3,1fr)}
   .kpi-row{grid-template-columns:repeat(2,1fr)}
   .charts-row{grid-template-columns:1fr}
   .inc-row{grid-template-columns:1fr}
@@ -238,6 +238,9 @@ tr:hover td{background:var(--bg)}
       </button>
       <button class="dp-btn" id="pf-mant" onclick="setPlantFilter('mant')" style="padding:6px 14px;border-left:3px solid #10b981">
         Mantenimiento
+      </button>
+      <button class="dp-btn" id="pf-almac" onclick="setPlantFilter('almac')" style="padding:6px 14px;border-left:3px solid #e11d48">
+        Almacén
       </button>
     </div>
 
@@ -376,10 +379,11 @@ const FB_PID = 'upav-docente';
 const FB_BASE = `https://firestore.googleapis.com/v1/projects/${FB_PID}/databases/(default)/documents/`;
 
 const PLANTAS = [
-  { id:'desc', nombre:'Descafeinado', doc:'descafeinado/datos', color:'#0ea5e9' },
-  { id:'env',  nombre:'Envasado',     doc:'cafiver/datos',      color:'#f59e0b' },
-  { id:'pse',  nombre:'PSE',          doc:'pse/datos',          color:'#8b5cf6' },
-  { id:'mant', nombre:'Mantenimiento',doc:'mantenimiento/datos',color:'#10b981' },
+  { id:'desc',  nombre:'Descafeinado', doc:'descafeinado/datos', color:'#0ea5e9' },
+  { id:'env',   nombre:'Envasado',     doc:'cafiver/datos',      color:'#f59e0b' },
+  { id:'pse',   nombre:'PSE',          doc:'pse/datos',          color:'#8b5cf6' },
+  { id:'mant',  nombre:'Mantenimiento',doc:'mantenimiento/datos',color:'#10b981' },
+  { id:'almac', nombre:'Almacén',      doc:'almacen/datos',      color:'#e11d48' },
 ];
 
 const INC_TYPES = {
@@ -547,7 +551,7 @@ let _plantFilter = 'todas';
 
 function setPlantFilter(f) {
   _plantFilter = f;
-  ['todas','desc','env','pse','mant'].forEach(k => {
+  ['todas','desc','env','pse','mant','almac'].forEach(k => {
     const btn = document.getElementById('pf-'+k);
     if (btn) btn.classList.toggle('active', k===f);
   });
