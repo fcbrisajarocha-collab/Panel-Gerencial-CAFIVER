@@ -389,15 +389,17 @@ const PLANTAS = [
 ];
 
 const INC_TYPES = {
-  falta:   { label:'Faltas',         color:'#dc2626', states:['FALTA'] },
-  retardo: { label:'Retardos',       color:'#f59e0b', states:['RET. <10','RET. >10'] },
-  permiso: { label:'Permisos',       color:'#3b82f6', states:['PCG','PSG'] },
-  incap:   { label:'Incapacidades',  color:'#8b5cf6', states:['INCAPACIDAD'] },
-  castigo: { label:'Castigos',       color:'#991b1b', states:['CASTIGO'] },
+  falta:    { label:'Faltas',             color:'#dc2626', states:['FALTA'] },
+  retardo:  { label:'Llega Tarde',        color:'#f59e0b', states:['LLEGA TARDE <10','LLEGA TARDE >10'] },
+  permiso:  { label:'Permisos',           color:'#3b82f6', states:['PCG','PSG','P. ENTRADA TARDE'] },
+  incap:    { label:'Incapacidades',      color:'#8b5cf6', states:['INCAPACIDAD'] },
+  castigo:  { label:'Castigos',           color:'#991b1b', states:['CASTIGO'] },
+  vacacion: { label:'Vacaciones',         color:'#065f46', states:['VACACIONES'] },
+  no:       { label:'No asistió reunión', color:'#7f1d1d', states:['NO'] },
 };
 
 const MESES = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
-const TURN_NAME = {1:'T1 · Matutino',2:'T2 · Vespertino',3:'T3 · Nocturno','mix':'Mixto/Admin'};
+const TURN_NAME = {1:'Turno 1 · 07:00-15:00',2:'Turno 2 · 15:00-23:00',3:'Turno 3 · 23:00-07:00','mix':'Mixto/Admin'};
 
 /* ── Datos globales ── */
 let G = {}; // { desc:{catalog,sessions}, env:..., pse:..., mant:... }
@@ -437,7 +439,7 @@ function calcAsist(sessions) {
     (s.team||[]).forEach(m => {
       total++;
       const st = m.status||'';
-      if (['SI'].includes(st)) si++;
+      if (st==='SI') si++;
       if (INC_TYPES.falta.states.includes(st))   faltas++;
       if (INC_TYPES.retardo.states.includes(st))  retardos++;
       if (INC_TYPES.permiso.states.includes(st))  permisos++;
@@ -823,7 +825,7 @@ function exportarExcel() {
     ['Plantas:', plantas.map(p=>p.nombre).join(', ')],
     sep,
     ['RESUMEN POR SESIÓN'],
-    ['Planta','Fecha','Turno','Supervisor','Área','Equipo','Presentes','Faltas','Retardos','Permisos','Incap.','Castigos','Sin capturar','% Asistencia'],
+    ['Planta','Fecha','Turno','Supervisor','Área','Equipo','Presentes','Faltas','Llega Tarde','Permisos','Incap.','Castigos','Sin capturar','% Asistencia'],
   ];
   plantas.forEach(p => {
     const sFilter = (G[p.id]?.sessions||[]).filter(s=>isInPeriod(s.date,fecha,_periodActive));
@@ -864,7 +866,7 @@ function exportarExcel() {
   const s3 = [
     sep,
     ['RESUMEN DE INCIDENCIAS ACUMULADAS POR COLABORADOR'],
-    ['Planta','# Control','Nombre','Puesto','Faltas','Retardos','Permisos','Incapacidades','Castigos','Total Incidencias','Total Presencias','Total Registros'],
+    ['Planta','# Control','Nombre','Puesto','Faltas','Llega Tarde','Permisos','Incapacidades','Castigos','Total Incidencias','Total Presencias','Total Registros'],
   ];
   plantas.forEach(p => {
     const catalog = G[p.id]?.catalog||[];
@@ -932,7 +934,7 @@ function abrirDetalle(plantaId) {
     {lbl:'Asistencia', val:stats.total?pct+'%':'—', color:pctColor(pct)},
     {lbl:'Presentes',  val:stats.si,                 color:'#15803d'},
     {lbl:'Faltas',     val:stats.faltas||0,           color:'#dc2626'},
-    {lbl:'Retardos',   val:stats.retardos||0,         color:'#d97706'},
+    {lbl:'Llega Tarde',   val:stats.retardos||0,         color:'#d97706'},
     {lbl:'Incidencias',val:stats.faltas+stats.retardos+stats.permisos+stats.incap+stats.castigos, color:'#7c3aed'},
   ].map(function(k){
     return '<div style="padding:14px 16px;text-align:center;border-right:1px solid #e2e8f0">' +
@@ -1047,10 +1049,10 @@ function renderPaseSesion2(plantaId, sesionId, containerId) {
   var el      = document.getElementById(containerId);
   if(!ses){el.innerHTML='<div style="text-align:center;padding:32px;color:#94a3b8">Sesi\u00f3n no encontrada</div>';return;}
   var EC={
-    'SI':{bg:'#dcfce7',fg:'#15803d'},'RET. >10':{bg:'#fef3c7',fg:'#92400e'},
-    'RET. <10':{bg:'#fef3c7',fg:'#d97706'},'FALTA':{bg:'#fef2f2',fg:'#dc2626'},
+    'SI':{bg:'#dcfce7',fg:'#15803d'},'LLEGA TARDE >10':{bg:'#fef3c7',fg:'#92400e'},'RET. >10':{bg:'#fef3c7',fg:'#92400e'},
+    'LLEGA TARDE <10':{bg:'#fef3c7',fg:'#d97706'},'RET. <10':{bg:'#fef3c7',fg:'#d97706'},'FALTA':{bg:'#fef2f2',fg:'#dc2626'},
     'INCAPACIDAD':{bg:'#ede9fe',fg:'#6d28d9'},'PSG':{bg:'#dbeafe',fg:'#1d4ed8'},
-    'PCG':{bg:'#dbeafe',fg:'#2563eb'},'CASTIGO':{bg:'#fef2f2',fg:'#991b1b'},
+    'PCG':{bg:'#dbeafe',fg:'#2563eb'},'CASTIGO':{bg:'#fef2f2',fg:'#991b1b'},'NO':{bg:'#fee2e2',fg:'#7f1d1d'},'VACACIONES':{bg:'#d1fae5',fg:'#065f46'},'P. ENTRADA TARDE':{bg:'#fef3c7',fg:'#92400e'},
   };
   var m=calcAsist([ses]);
   el.innerHTML='<div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap">'+
