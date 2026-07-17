@@ -547,7 +547,7 @@ function setTrend(v) {
 function cargarTodo() {
   const fecha = document.getElementById('fecha-rep').value || todayStr();
   document.getElementById('hbar-date').textContent = fmtDate(fecha);
-  render();
+  render(); // render() ya llama refrescarModalSiAbierto()
 }
 
 /* ── RENDER PRINCIPAL ── */
@@ -594,6 +594,16 @@ function render() {
   document.getElementById('period-label').textContent =
     getPeriodLabel(fecha, period) +
     (_plantFilter!=='todas' ? ' · ' + (PLANTAS.find(p=>p.id===_plantFilter)?.nombre||'') : '');
+  // Si el modal de detalle está abierto, refrescarlo con los nuevos datos
+  refrescarModalSiAbierto();
+}
+
+function refrescarModalSiAbierto() {
+  if (!_mdPlantaId) return;
+  var modal = document.getElementById('modal-detalle');
+  if (!modal || modal.style.display === 'none') return;
+  // Re-abrir con los datos frescos del período actual
+  abrirDetalle(_mdPlantaId);
 }
 
 function getPeriodLabel(fecha, period) {
@@ -942,6 +952,11 @@ function abrirDetalle(plantaId) {
       '<div style="font-size:22px;font-weight:700;color:'+k.color+';font-family:\'Space Grotesk\',sans-serif">'+k.val+'</div></div>';
   }).join('');
 
+  // Limpiar contenido de todas las tabs antes de renderizar (evita datos de sesión anterior)
+  ['sesiones','pase','incidencias','personal'].forEach(function(t) {
+    var div = document.getElementById('md-tab-'+t);
+    if (div) div.innerHTML = '<div style="text-align:center;padding:32px;color:#94a3b8">Cargando...</div>';
+  });
   setMdTab2('sesiones');
   document.getElementById('modal-overlay').style.display = 'block';
   document.getElementById('modal-detalle').style.display = 'block';
@@ -963,14 +978,17 @@ function setMdTab2(tab) {
     if(btn){ btn.style.color=active?'#2563eb':'#64748b'; btn.style.borderBottom=active?'2px solid #2563eb':'2px solid transparent'; }
     if(div) div.style.display = active?'block':'none';
   });
+  // Forzar re-render siempre con datos frescos del período actual
   renderMdTab2(tab);
 }
 
 function renderMdTab2(tab) {
   if (!_mdPlantaId) return;
+  // Siempre leer fecha y período del selector activo en este momento
   var fecha    = document.getElementById('fecha-rep').value || todayStr();
+  var period   = _periodActive; // período activo al momento de renderizar
   var data     = G[_mdPlantaId];
-  var sessions = (data.sessions||[]).filter(function(s){return isInPeriod(s.date,fecha,_periodActive);});
+  var sessions = (data.sessions||[]).filter(function(s){ return isInPeriod(s.date, fecha, period); });
   var catalog  = data.catalog||[];
 
   if (tab==='sesiones') {
