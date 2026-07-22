@@ -263,7 +263,7 @@ tr:hover td{background:var(--bg)}
         <div class="chart-wrap"><canvas id="chart-plants"></canvas></div>
       </div>
       <div class="chart-card">
-        <div class="chart-title">Distribución de Incidencias Global</div>
+        <div class="chart-title">Incidencias por Tipo</div>
         <div class="chart-wrap"><canvas id="chart-inc-pie"></canvas></div>
       </div>
     </div>
@@ -701,12 +701,43 @@ function renderChartPlants(pd) {
 function renderIncPie(pd) {
   const canvas = document.getElementById('chart-inc-pie');
   if (_charts.pie) _charts.pie.destroy();
-  const totals = { falta:0, retardo:0, permiso:0, incap:0, castigo:0 };
-  pd.forEach(p => { totals.falta+=p.stats.faltas; totals.retardo+=p.stats.retardos; totals.permiso+=p.stats.permisos; totals.incap+=p.stats.incap; totals.castigo+=p.stats.castigos; });
+  const totals = { falta:0, retardo:0, permiso:0, incap:0, castigo:0, vacacion:0, no:0 };
+  pd.forEach(p => {
+    totals.falta    += p.stats.faltas;
+    totals.retardo  += p.stats.retardos;
+    totals.permiso  += p.stats.permisos;
+    totals.incap    += p.stats.incap;
+    totals.castigo  += p.stats.castigos;
+    totals.vacacion += p.stats.vacaciones||0;
+    totals.no       += p.stats.no_asistio||0;
+  });
+  const labels = Object.values(INC_TYPES).map(t=>t.label);
+  const values = Object.keys(INC_TYPES).map(k=>totals[k]||0);
+  const colors = Object.values(INC_TYPES).map(t=>t.color);
   _charts.pie = new Chart(canvas, {
-    type:'doughnut',
-    data:{ labels:Object.values(INC_TYPES).map(t=>t.label), datasets:[{ data:Object.keys(INC_TYPES).map(k=>totals[k]), backgroundColor:Object.values(INC_TYPES).map(t=>t.color), borderWidth:0 }] },
-    options:{ responsive:true, maintainAspectRatio:false, plugins:{ legend:{ position:'bottom', labels:{ font:{size:10,family:'DM Sans'} } } } }
+    type:'bar',
+    data:{
+      labels: labels,
+      datasets:[{
+        data: values,
+        backgroundColor: colors,
+        borderRadius: 6,
+        borderWidth: 0,
+      }]
+    },
+    options:{
+      responsive:true,
+      maintainAspectRatio:false,
+      indexAxis:'y',
+      plugins:{
+        legend:{ display:false },
+        tooltip:{ callbacks:{ label: ctx => ' '+ctx.raw+' registros' } }
+      },
+      scales:{
+        x:{ beginAtZero:true, ticks:{ stepSize:1, font:{size:10} }, grid:{color:'#f1f5f9'} },
+        y:{ ticks:{ font:{size:10,family:'DM Sans'}, color:'#334155' } }
+      }
+    }
   });
 }
 
