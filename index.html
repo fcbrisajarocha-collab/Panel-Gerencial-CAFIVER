@@ -434,21 +434,25 @@ function isInPeriod(dateStr, refDate, period) {
   return false;
 }
 function calcAsist(sessions) {
-  let si=0,total=0,faltas=0,retardos=0,permisos=0,incap=0,castigos=0;
+  let si=0,total=0,faltas=0,retardos=0,permisos=0,incap=0,castigos=0,vacaciones=0,no_asistio=0;
   sessions.forEach(s => {
     (s.team||[]).forEach(m => {
       total++;
       const st = m.status||'';
       if (st==='SI') si++;
-      if (INC_TYPES.falta.states.includes(st))   faltas++;
+      if (INC_TYPES.falta.states.includes(st))    faltas++;
       if (INC_TYPES.retardo.states.includes(st))  retardos++;
       if (INC_TYPES.permiso.states.includes(st))  permisos++;
       if (INC_TYPES.incap.states.includes(st))    incap++;
       if (INC_TYPES.castigo.states.includes(st))  castigos++;
+      if (INC_TYPES.vacacion && INC_TYPES.vacacion.states.includes(st)) vacaciones++;
+      if (INC_TYPES.no && INC_TYPES.no.states.includes(st))             no_asistio++;
     });
   });
-  const pct = total ? Math.round(si/total*100) : 0;
-  return { si, total, faltas, retardos, permisos, incap, castigos, pct };
+  // El % de asistencia solo considera quienes debían trabajar (excluye vacaciones)
+  const totalEfectivo = total - vacaciones;
+  const pct = totalEfectivo ? Math.round(si/totalEfectivo*100) : 0;
+  return { si, total, totalEfectivo, faltas, retardos, permisos, incap, castigos, vacaciones, no_asistio, pct };
 }
 
 /* ── Firebase fetch ── */
@@ -641,8 +645,10 @@ function renderPlantCards(pd) {
       <div class="pc-pct" style="color:${pctColor(s.pct)}">${hasSes?s.pct+'%':'—'}</div>
       <div class="pc-sub">${hasSes?s.si+' presentes / '+s.total+' registros':p.catalog.length+' en catálogo'}</div>
       <div class="pc-pills">
-        ${s.faltas>0?`<span class="pc-pill" style="background:#fef2f2;color:#dc2626">⚫ ${s.faltas} falt.</span>`:''}
+        ${s.faltas>0?`<span class="pc-pill" style="background:#fef2f2;color:#dc2626">✗ ${s.faltas} falt.</span>`:''}
         ${s.retardos>0?`<span class="pc-pill" style="background:#fef3c7;color:#92400e">⏱ ${s.retardos} ret.</span>`:''}
+        ${s.vacaciones>0?`<span class="pc-pill" style="background:#d1fae5;color:#065f46">🏖 ${s.vacaciones} vac.</span>`:''}
+        ${s.no_asistio>0?`<span class="pc-pill" style="background:#fee2e2;color:#7f1d1d">○ ${s.no_asistio} no asist.</span>`:''}
         ${s.castigos>0?`<span class="pc-pill" style="background:#fef2f2;color:#7f1d1d">⚠ ${s.castigos} cast.</span>`:''}
       </div>
       <button onclick="abrirDetalle('${p.id}')" style="margin-top:10px;width:100%;padding:7px;border:1.5px solid ${p.color};background:${p.color}11;color:${p.color};border-radius:8px;font-size:11px;font-weight:700;cursor:pointer;font-family:'DM Sans',sans-serif;letter-spacing:.3px;transition:all .15s" onmouseover="this.style.background='${p.color}22'" onmouseout="this.style.background='${p.color}11'">
@@ -654,8 +660,14 @@ function renderPlantCards(pd) {
 
 /* ── KPIs GLOBALES ── */
 function renderKPIs(pd) {
-  const all = pd.reduce((a,p)=>{ const s=p.stats; return {si:a.si+s.si,total:a.total+s.total,faltas:a.faltas+s.faltas,retardos:a.retardos+s.retardos,permisos:a.permisos+s.permisos,incap:a.incap+s.incap,castigos:a.castigos+s.castigos}; }, {si:0,total:0,faltas:0,retardos:0,permisos:0,incap:0,castigos:0});
-  const pct = all.total ? Math.round(all.si/all.total*100) : 0;
+  const all = pd.reduce((a,p)=>{ const s=p.stats; return {
+    si:a.si+s.si, total:a.total+s.total, totalEfectivo:a.totalEfectivo+(s.totalEfectivo||s.total),
+    faltas:a.faltas+s.faltas, retardos:a.retardos+s.retardos,
+    permisos:a.permisos+s.permisos, incap:a.incap+s.incap,
+    castigos:a.castigos+s.castigos, vacaciones:a.vacaciones+(s.vacaciones||0),
+    no_asistio:a.no_asistio+(s.no_asistio||0)
+  }; }, {si:0,total:0,totalEfectivo:0,faltas:0,retardos:0,permisos:0,incap:0,castigos:0,vacaciones:0,no_asistio:0});
+  const pct = all.totalEfectivo ? Math.round(all.si/all.totalEfectivo*100) : 0;
   const totalSes = pd.reduce((a,p)=>a+p.sessions.length,0);
   document.getElementById('kpi-row').innerHTML = `
     <div class="kpi"><div class="kpi-lbl">Asistencia Global</div><div class="kpi-val" style="color:${pctColor(pct)}">${all.total?pct+'%':'—'}</div><div class="kpi-sub">${all.si} de ${all.total} presentes</div></div>
