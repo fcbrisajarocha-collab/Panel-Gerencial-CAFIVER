@@ -368,22 +368,29 @@ const PLANTAS = [
 ];
 
 /* ─────────────────────────────────────────────────
-   INC_TYPES: FUENTE ÚNICA DE VERDAD
-   Cada estado reconocido vive aquí.
-   `otros` NO está aquí; se calcula como residuo.
+   INC_TYPES: estados que cuentan como INCIDENCIA.
+   Vacaciones NO están aquí: son estado neutro, no
+   ausencia ni incidencia laboral.
 ───────────────────────────────────────────────── */
 const INC_TYPES = {
-  falta:    { label:'Faltas',             color:'#dc2626', states:['FALTA'] },
-  retardo:  { label:'Llega Tarde',        color:'#f59e0b', states:['LLEGA TARDE <10','LLEGA TARDE >10','RET. <10','RET. >10'] },
-  permiso:  { label:'Permisos',           color:'#3b82f6', states:['PCG','PSG','P. ENTRADA TARDE'] },
-  incap:    { label:'Incapacidades',      color:'#8b5cf6', states:['INCAPACIDAD'] },
-  castigo:  { label:'Castigos',           color:'#991b1b', states:['CASTIGO'] },
-  vacacion: { label:'Vacaciones',         color:'#065f46', states:['VACACIONES'] },
+  falta:   { label:'Faltas',         color:'#dc2626', states:['FALTA'] },
+  retardo: { label:'Llega Tarde',    color:'#f59e0b', states:['LLEGA TARDE <10','LLEGA TARDE >10','RET. <10','RET. >10'] },
+  permiso: { label:'Permisos',       color:'#3b82f6', states:['PCG','PSG','P. ENTRADA TARDE'] },
+  incap:   { label:'Incapacidades',  color:'#8b5cf6', states:['INCAPACIDAD'] },
+  castigo: { label:'Castigos',       color:'#991b1b', states:['CASTIGO'] },
 };
 
-/* Estado sin incidencia real (se excluye del conteo de ausencias) */
+/* Estados NEUTROS: reconocidos pero NO son incidencia ni ausencia.
+   Se cuentan aparte y se excluyen del % asistencia. */
+const ESTADOS_NEUTROS = { vacacion: { label:'Vacaciones', color:'#065f46', states:['VACACIONES'] } };
+
+/* Estado sin incidencia real */
 const ESTADO_SI    = 'SI';
-const STATUS_KNOWN = new Set([ESTADO_SI, ...Object.values(INC_TYPES).flatMap(t => t.states)]);
+const STATUS_KNOWN = new Set([
+  ESTADO_SI,
+  ...Object.values(INC_TYPES).flatMap(t => t.states),
+  ...Object.values(ESTADOS_NEUTROS).flatMap(t => t.states),
+]);
 
 const MESES    = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
 const TURN_NAME = {1:'T1 · 07:00-15:00',2:'T2 · 15:00-23:00',3:'T3 · 23:00-07:00',mix:'Mixto/Admin'};
@@ -421,58 +428,64 @@ function isInPeriod(dateStr, refDate, period) {
   return false;
 }
 
-/* ═══════════════════════════════════════════════
-   calcAsist — FUNCIÓN CENTRAL CORREGIDA
-   REGLA: El Total nunca se calcula independiente
-   de las columnas. Es la suma de lo que se pinta.
-   - totalInc  = incidencias contadas (todas)
-   - otros     = estados sin mapeo (cazadora)
-   - El % asistencia excluye vacaciones del total
-═══════════════════════════════════════════════ */
+/* ═══════════════════════════════════════════════════════
+   calcAsist — FUNCIÓN CENTRAL
+   REGLA: vacaciones son estado NEUTRO.
+   - NO cuentan como incidencia
+   - NO afectan el denominador del % asistencia
+   - Se contabilizan aparte para mostrar en pills
+   - totalInc = falta+retardo+permiso+incap+castigo+otros
+   - El Total nunca puede diferir de la suma de columnas
+═══════════════════════════════════════════════════════ */
 function calcAsist(sessions) {
   let si=0, total=0;
-  let falta=0, retardo=0, permiso=0, incap=0, castigo=0, vacacion=0, otros=0;
-  const _otrosMap = {}; // { estado: count } para diagnóstico
+  let falta=0, retardo=0, permiso=0, incap=0, castigo=0;
+  let vacacion=0, otros=0;
+  const _otrosMap = {};
 
   sessions.forEach(s => {
     (s.team||[]).forEach(m => {
       total++;
       const st = (m.status||'').trim();
+
+      // ① Presente
       if (st === ESTADO_SI) { si++; return; }
 
-      // Intentar mapear en INC_TYPES
+      // ② Estado NEUTRO (vacaciones): cuenta aparte, no es incidencia
+      let esNeutro = false;
+      for (const t of Object.values(ESTADOS_NEUTROS)) {
+        if (t.states.includes(st)) { vacacion++; esNeutro=true; break; }
+      }
+      if (esNeutro) return;
+
+      // ③ Incidencia reconocida
       let mapped = false;
       for (const [k, t] of Object.entries(INC_TYPES)) {
         if (t.states.includes(st)) {
-          if (k==='falta')    falta++;
-          if (k==='retardo')  retardo++;
-          if (k==='permiso')  permiso++;
-          if (k==='incap')    incap++;
-          if (k==='castigo')  castigo++;
-          if (k==='vacacion') vacacion++;
-          mapped = true;
-          break;
+          if (k==='falta')   falta++;
+          if (k==='retardo') retardo++;
+          if (k==='permiso') permiso++;
+          if (k==='incap')   incap++;
+          if (k==='castigo') castigo++;
+          mapped = true; break;
         }
       }
-      // Estado no mapeado → cazadora `otros`
-      if (!mapped) {
-        otros++;
-        _otrosMap[st] = (_otrosMap[st]||0)+1;
-      }
+
+      // ④ Estado desconocido → cazadora
+      if (!mapped) { otros++; _otrosMap[st] = (_otrosMap[st]||0)+1; }
     });
   });
 
-  const totalEfectivo = total - vacacion; // vacaciones no cuentan como ausencia
+  // % asistencia: denominador excluye vacaciones (ni presentes ni ausentes)
+  const totalEfectivo = total - vacacion;
   const pct = totalEfectivo ? Math.round(si/totalEfectivo*100) : 0;
 
-  // totalInc = suma real de TODAS las incidencias registradas
-  // Principio: Total columna ≡ suma de lo pintado en columnas
+  // totalInc: solo incidencias reales. Vacaciones NO entran aquí.
   const totalInc = falta + retardo + permiso + incap + castigo + otros;
-  // (vacaciones se excluyen del conteo de "incidencias" pero se muestran aparte)
 
   return { si, total, totalEfectivo, pct,
-           falta, retardo, permiso, incap, castigo, vacacion,
-           otros, totalInc, _otrosMap };
+           falta, retardo, permiso, incap, castigo,
+           vacacion, otros, totalInc, _otrosMap };
 }
 
 /* ── Firebase fetch ── */
@@ -779,7 +792,7 @@ function renderTrend() {
       const st = (m.status||'').trim();
       buckets[key].total++;
       if (st===ESTADO_SI) buckets[key].si++;
-      if (INC_TYPES.vacacion.states.includes(st)) buckets[key].vac++;
+      if (ESTADOS_NEUTROS.vacacion.states.includes(st)) buckets[key].vac++;
     });
   });
   const labels = Object.keys(buckets).sort();
@@ -865,12 +878,13 @@ function renderTopColaboradores(pd) {
       (s.team||[]).forEach(m => {
         const st = (m.status||'').trim();
         if (st === ESTADO_SI) return;
-        // Determinar tipo
+        // Vacaciones: estado neutro, excluir del top de incidencias
+        if (Object.values(ESTADOS_NEUTROS).some(t=>t.states.includes(st))) return;
+        // Determinar tipo de incidencia
         let tipo = 'otros';
         for (const [k,t] of Object.entries(INC_TYPES)) {
           if (t.states.includes(st)) { tipo = k; break; }
         }
-        if (tipo==='vacacion') return; // vacaciones no son "incidencias"
 
         const cat = p.catalog.find(x=>x.id===m.catId);
         const key = p.id+'_'+m.catId;
@@ -932,7 +946,9 @@ function exportarExcel() {
         if (!m.status || m.status===ESTADO_SI) return;
         const cat = catalog.find(x=>x.id===m.catId);
         let tipo = 'Sin mapear ❓';
+        // Buscar primero en INC_TYPES (incidencias), luego en ESTADOS_NEUTROS
         for(const [k,t] of Object.entries(INC_TYPES)) if(t.states.includes(m.status)){tipo=t.label;break;}
+        if(tipo==='Sin mapear ❓') for(const [k,t] of Object.entries(ESTADOS_NEUTROS)) if(t.states.includes(m.status)){tipo=t.label+' (neutro)';break;}
         s2.push([p.nombre, cat?.ctrl||'—', cat?.name||'—', cat?.puesto||'—',
           TURN_NAME[s.turno]||'T'+s.turno, s.date, s.supervisor, m.status, tipo, m.obs||'']);
       });
@@ -960,7 +976,8 @@ document.head.appendChild(printStyle);
    MODAL DETALLE POR PLANTA
    Tab "Incidencias" ahora usa totalInc real
 ══════════════════════════════════════════ */
-var _mdPlantaId = null;
+var _mdPlantaId  = null;
+var _mdSesionId  = null; // sesión seleccionada en el tab Pase de Lista
 
 function abrirDetalle(plantaId) {
   _mdPlantaId = plantaId;
@@ -988,6 +1005,7 @@ function abrirDetalle(plantaId) {
     ${k.sub?`<div style="font-size:10px;color:#d97706;font-weight:600">${k.sub}</div>`:''}
   </div>`).join('');
 
+  _mdSesionId = null; // resetear al abrir: el tab Pase cargará la sesión más reciente por defecto
   ['sesiones','pase','incidencias','personal'].forEach(t => {
     var div = document.getElementById('md-tab-'+t);
     if (div) div.innerHTML = '<div style="text-align:center;padding:32px;color:#94a3b8">Cargando...</div>';
@@ -1003,9 +1021,10 @@ function cerrarDetalle() {
   document.getElementById('modal-detalle').style.display = 'none';
   document.body.style.overflow = '';
   _mdPlantaId = null;
+  _mdSesionId = null;
 }
 
-function setMdTab2(tab) {
+function setMdTab2(tab, skipRender) {
   ['sesiones','pase','incidencias','personal'].forEach(t => {
     var btn = document.getElementById('mdt-'+t);
     var div = document.getElementById('md-tab-'+t);
@@ -1013,7 +1032,7 @@ function setMdTab2(tab) {
     if(btn){ btn.style.color=active?'#2563eb':'#64748b'; btn.style.borderBottom=active?'2px solid #2563eb':'2px solid transparent'; }
     if(div) div.style.display = active?'block':'none';
   });
-  renderMdTab2(tab);
+  if (!skipRender) renderMdTab2(tab);
 }
 
 function renderMdTab2(tab) {
@@ -1062,7 +1081,11 @@ function renderMdTab2(tab) {
   else if (tab==='pase') {
     var sesOrden = sessions.slice().sort((a,b)=>b.date.localeCompare(a.date));
     if (!sesOrden.length) { document.getElementById('md-tab-pase').innerHTML='<div style="text-align:center;padding:32px;color:#94a3b8">Sin sesiones</div>'; return; }
-    renderPaseSesion2(_mdPlantaId, sesOrden[0].id, 'md-tab-pase');
+    // Usar sesión seleccionada por el usuario (_mdSesionId), o la más reciente por defecto
+    var idTarget = (_mdSesionId && sesOrden.find(function(s){return s.id===_mdSesionId;}))
+      ? _mdSesionId
+      : sesOrden[0].id;
+    renderPaseSesion2(_mdPlantaId, idTarget, 'md-tab-pase');
   }
 
   else if (tab==='incidencias') {
@@ -1077,11 +1100,13 @@ function renderMdTab2(tab) {
       (s.team||[]).forEach(m => {
         const st = (m.status||'').trim();
         if (st === ESTADO_SI) return;
+        // Vacaciones son estado neutro: no son incidencia, se excluyen aquí
+        let esNeutro = Object.values(ESTADOS_NEUTROS).some(t=>t.states.includes(st));
+        if (esNeutro) return;
         let tipo = 'otros';
         for (const [k,t] of Object.entries(INC_TYPES)) {
           if (t.states.includes(st)) { tipo=k; break; }
         }
-        if (tipo==='vacacion') return;
         var cat=catalog.find(x=>x.id===m.catId);
         if(!byP[m.catId]) byP[m.catId]={name:cat?cat.name:'—',puesto:cat?cat.puesto:'—',falta:0,retardo:0,permiso:0,incap:0,castigo:0,otros:0,total:0};
         byP[m.catId][tipo]++;
@@ -1139,8 +1164,9 @@ function renderMdTab2(tab) {
 
 function verPaseLista(plantaId, sesionId) {
   _mdPlantaId = plantaId;
-  renderPaseSesion2(plantaId, sesionId, 'md-tab-pase');
-  setMdTab2('pase');
+  _mdSesionId = sesionId; // recordar la sesión que el usuario eligió
+  renderPaseSesion2(plantaId, sesionId, 'md-tab-pase'); // render primero
+  setMdTab2('pase', true); // skipRender=true: solo cambia el tab visualmente, no re-renderiza
 }
 
 function renderPaseSesion2(plantaId, sesionId, containerId) {
