@@ -688,18 +688,52 @@ function renderChartPlants(pd) {
   const canvas = document.getElementById('chart-plants');
   if (_charts.plants) _charts.plants.destroy();
   const turnos = [1,2,3,'mix'];
+  const labels  = ['T1 · 07:00-15:00','T2 · 15:00-23:00','T3 · 23:00-07:00','Mixto/Admin'];
   const datasets = pd.map(p => {
     const byT = turnos.map(t => {
       const sesST = p.sessions.filter(s=>String(s.turno)===String(t));
       const m = calcAsist(sesST);
-      return m.total ? m.pct : null;
+      // Usar 0 en lugar de null para que Chart.js mantenga la posición correcta
+      // Solo mostrar la barra si hay datos reales
+      return sesST.length > 0 ? m.pct : 0;
     });
-    return { label:p.nombre, data:byT, backgroundColor:p.color+'cc', borderColor:p.color, borderWidth:2, borderRadius:4 };
+    // Calcular opacidad por columna: transparente si no hay sesiones de ese turno
+    const bgColors = turnos.map((t,i) => {
+      const hasSes = p.sessions.some(s=>String(s.turno)===String(t));
+      return hasSes ? p.color+'cc' : p.color+'11';
+    });
+    return {
+      label: p.nombre,
+      data: byT,
+      backgroundColor: bgColors,
+      borderColor: p.color,
+      borderWidth: 1,
+      borderRadius: 4,
+    };
   });
   _charts.plants = new Chart(canvas, {
     type:'bar',
-    data:{ labels:['T1 · Matutino','T2 · Vespertino','T3 · Nocturno','Mixto/Admin'], datasets },
-    options:{ responsive:true, maintainAspectRatio:false, plugins:{ legend:{ position:'bottom', labels:{ font:{size:10,family:'DM Sans'}, boxWidth:10 } } }, scales:{ y:{ beginAtZero:true, max:100, ticks:{ callback:v=>v+'%', font:{size:10} } }, x:{ ticks:{ font:{size:10} } } } }
+    data:{ labels, datasets },
+    options:{
+      responsive:true,
+      maintainAspectRatio:false,
+      plugins:{
+        legend:{ position:'bottom', labels:{ font:{size:10,family:'DM Sans'}, boxWidth:10 } },
+        tooltip:{
+          callbacks:{
+            label: ctx => {
+              const t = turnos[ctx.dataIndex];
+              const hasSes = pd[ctx.datasetIndex]?.sessions.some(s=>String(s.turno)===String(t));
+              return hasSes ? ` ${ctx.raw}%` : ' Sin registro';
+            }
+          }
+        }
+      },
+      scales:{
+        y:{ beginAtZero:true, max:100, ticks:{ callback:v=>v+'%', font:{size:10} } },
+        x:{ ticks:{ font:{size:10} } }
+      }
+    }
   });
 }
 
