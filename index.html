@@ -1031,8 +1031,8 @@ function setMdTab2(tab) {
     if(btn){ btn.style.color=active?'#2563eb':'#64748b'; btn.style.borderBottom=active?'2px solid #2563eb':'2px solid transparent'; }
     if(div) div.style.display = active?'block':'none';
   });
-  // Forzar re-render siempre con datos frescos del período actual
-  renderMdTab2(tab);
+  // Solo re-render automático si NO es pase (el pase lo maneja verPaseLista con limpieza)
+  if(tab !== 'pase') renderMdTab2(tab);
 }
 
 function renderMdTab2(tab) {
@@ -1109,8 +1109,14 @@ function renderMdTab2(tab) {
 
 function verPaseLista(plantaId, sesionId) {
   _mdPlantaId = plantaId;
-  renderPaseSesion2(plantaId, sesionId, 'md-tab-pase');
-  setMdTab2('pase');
+  // Limpiar SIEMPRE antes de cargar para evitar mostrar datos de sesión anterior
+  var elPase = document.getElementById('md-tab-pase');
+  if (elPase) elPase.innerHTML = '<div style="text-align:center;padding:32px;color:#94a3b8">Cargando...</div>';
+  // Pequeño timeout para asegurar que el DOM se limpió antes de renderizar
+  setTimeout(function() {
+    renderPaseSesion2(plantaId, sesionId, 'md-tab-pase');
+    setMdTab2('pase');
+  }, 30);
 }
 
 function renderPaseSesion2(plantaId, sesionId, containerId) {
