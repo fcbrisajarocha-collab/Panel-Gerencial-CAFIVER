@@ -778,9 +778,19 @@ function renderTrend() {
 /* ── INCIDENCIAS POR PLANTA ── */
 function renderIncRow(pd) {
   const el = document.getElementById('inc-row');
+  // Mapa directo de clave INC_TYPES → campo en stats
+  const STAT_KEY = {
+    falta:   'faltas',
+    retardo: 'retardos',
+    permiso: 'permisos',
+    incap:   'incap',
+    castigo: 'castigos',
+    vacacion:'vacaciones',
+    no:      'no_asistio',
+  };
   el.innerHTML = pd.map(p => {
     const s = p.stats;
-    const total = s.faltas+s.retardos+s.permisos+s.incap+s.castigos;
+    const total = (s.faltas||0)+(s.retardos||0)+(s.permisos||0)+(s.incap||0)+(s.castigos||0)+(s.vacaciones||0)+(s.no_asistio||0);
     return `<div class="inc-card">
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
         <div style="width:10px;height:10px;border-radius:50%;background:${p.color}"></div>
@@ -788,8 +798,10 @@ function renderIncRow(pd) {
         <div style="margin-left:auto;font-size:11px;font-weight:600;color:var(--tx3)">${total} incidencia${total!==1?'s':''}</div>
       </div>
       ${Object.entries(INC_TYPES).map(([k,t])=>{
-        const val = k==='falta'?s.faltas:k==='retardo'?s.retardos:k==='permiso'?s.permisos:k==='incap'?s.incap:s.castigos;
-        const pct = s.total&&val ? Math.round(val/s.total*100) : 0;
+        const campo = STAT_KEY[k] || 'faltas';
+        const val = s[campo] || 0;
+        const base = (s.totalEfectivo || s.total) || 1;
+        const pct = val ? Math.round(val/base*100) : 0;
         return `<div style="margin-bottom:7px">
           <div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:3px">
             <span style="color:var(--tx3)">${t.label}</span>
