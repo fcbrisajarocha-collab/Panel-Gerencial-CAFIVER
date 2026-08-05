@@ -395,7 +395,7 @@ const PLANTAS = [
 
 const INC_TYPES = {
   falta:    { label:'Faltas',             color:'#dc2626', states:['FALTA'] },
-  retardo:  { label:'Llega Tarde',        color:'#f59e0b', states:['LLEGA TARDE <10','LLEGA TARDE >10'] },
+  retardo:  { label:'Llega Tarde',        color:'#f59e0b', states:['LLEGA TARDE <10','LLEGA TARDE >10','RET. <10','RET. >10'] },
   permiso:  { label:'Permisos',           color:'#3b82f6', states:['PCG','PSG','P. ENTRADA TARDE'] },
   incap:    { label:'Incapacidades',      color:'#8b5cf6', states:['INCAPACIDAD'] },
   castigo:  { label:'Castigos',           color:'#991b1b', states:['CASTIGO'] },
@@ -880,6 +880,9 @@ function renderSesTable(pd) {
 function renderTopColaboradores(pd) {
   const byPerson = {};
   pd.forEach(p => {
+    // Crear mapa ctrl→colaborador para lookups rápidos
+    const ctrlMap = {};
+    (p.catalog||[]).forEach(x => { ctrlMap[x.id]=x; ctrlMap[x.ctrl]=x; if(x.id) ctrlMap[x.id.split('_').pop()]=x; });
     p.sessions.forEach(s => {
       (s.team||[]).forEach(m => {
         const isFalta   = INC_TYPES.falta.states.includes(m.status);
@@ -890,7 +893,7 @@ function renderTopColaboradores(pd) {
         const isVacacion= INC_TYPES.vacacion && INC_TYPES.vacacion.states.includes(m.status);
         const isNo      = INC_TYPES.no && INC_TYPES.no.states.includes(m.status);
         if (!isFalta&&!isRetardo&&!isPermiso&&!isIncap&&!isCastigo&&!isVacacion&&!isNo) return;
-        const cat = p.catalog.find(x=>x.id===m.catId);
+        const cat = p.catalog.find(x=>x.id===m.catId) || p.catalog.find(x=>x.ctrl===m.catId) || p.catalog.find(x=>m.catId && m.catId.endsWith('_'+x.ctrl));
         const key = p.id+'_'+m.catId;
         if (!byPerson[key]) byPerson[key] = { name:cat?.name||'—', planta:p.nombre, color:p.color, puesto:cat?.puesto||'—', falta:0,retardo:0,permiso:0,incap:0,castigo:0,vacacion:0,no:0,total:0 };
         if (isFalta)    { byPerson[key].falta++;    byPerson[key].total++; }
@@ -1124,7 +1127,7 @@ function renderMdTab2(tab) {
       (s.team||[]).forEach(function(m){
         var isInc = Object.values(INC_TYPES).some(function(t){return t.states.includes(m.status);});
         if(!isInc) return;
-        var cat=catalog.find(function(x){return x.id===m.catId;});
+        var cat=catalog.find(function(x){return x.id===m.catId;})||catalog.find(function(x){return x.ctrl===m.catId;})||catalog.find(function(x){return m.catId&&m.catId.endsWith('_'+x.ctrl);});
         if(!byP[m.catId]) byP[m.catId]={name:cat?cat.name:'—',puesto:cat?cat.puesto:'—',falta:0,retardo:0,permiso:0,incap:0,castigo:0,total:0};
         Object.entries(INC_TYPES).forEach(function(e){var k=e[0],t=e[1]; if(t.states.includes(m.status)){byP[m.catId][k]++;byP[m.catId].total++;}});
       });
