@@ -320,9 +320,19 @@ tr:hover td{background:var(--bg)}
 
     <!-- TOP INCIDENCIAS PERSONAL -->
     <div class="tbl-card">
-      <div class="tbl-hd">
+      <div class="tbl-hd" style="flex-wrap:wrap;gap:8px">
         <div class="tbl-ttl">Top Colaboradores con Incidencias</div>
-        <span style="font-size:11px;color:var(--tx3)">Consolidado todas las plantas</span>
+        <div style="display:flex;gap:8px;align-items:center;margin-left:auto;flex-wrap:wrap">
+          <input type="text" id="top-search" placeholder="🔍 Buscar colaborador..."
+            oninput="filtrarTopColabs()"
+            style="padding:6px 10px;border:1px solid var(--brd);border-radius:7px;font-size:12px;font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--tx);width:200px;outline:none">
+          <select id="top-select" onchange="filtrarTopColabs()"
+            style="padding:6px 10px;border:1px solid var(--brd);border-radius:7px;font-size:12px;font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--tx);cursor:pointer;outline:none">
+            <option value="">Todos los colaboradores</option>
+          </select>
+          <button onclick="limpiarFiltroTop()" class="btn btn-ghost" style="padding:5px 10px;font-size:11px">✕ Limpiar</button>
+        </div>
+        <span style="font-size:11px;color:var(--tx3);width:100%" id="top-count"></span>
       </div>
       <div class="tbl-wrap">
         <table>
@@ -885,6 +895,50 @@ function renderSesTable(pd) {
 }
 
 /* ── TOP COLABORADORES ── */
+// Variable global para filtro de colaboradores
+let _topAllData = [];
+
+function filtrarTopColabs() {
+  const q = (document.getElementById('top-search')?.value||'').toLowerCase().trim();
+  const sel = document.getElementById('top-select')?.value||'';
+  let arr = _topAllData;
+  if (q)   arr = arr.filter(p => p.name.toLowerCase().includes(q) || p.planta.toLowerCase().includes(q));
+  if (sel) arr = arr.filter(p => p.name === sel);
+  renderTopRows(arr);
+}
+
+function limpiarFiltroTop() {
+  const s = document.getElementById('top-search');
+  const d = document.getElementById('top-select');
+  if(s) s.value='';
+  if(d) d.value='';
+  renderTopRows(_topAllData);
+}
+
+function renderTopRows(arr) {
+  const tb = document.getElementById('top-tbody');
+  const cnt = document.getElementById('top-count');
+  if (!arr.length) {
+    tb.innerHTML=`<tr><td colspan="11" style="text-align:center;padding:24px;color:var(--tx4)">Sin resultados</td></tr>`;
+    if(cnt) cnt.textContent='';
+    return;
+  }
+  if(cnt) cnt.textContent = arr.length + ' colaborador' + (arr.length!==1?'es':'') + ' · ' + arr.reduce((a,p)=>a+p.total,0) + ' incidencias totales';
+  tb.innerHTML = arr.map(p=>`<tr>
+    <td style="font-weight:600">${p.name}</td>
+    <td><span style="font-size:10px;font-weight:700;padding:2px 7px;border-radius:6px;background:${p.color}22;color:${p.color}">${p.planta}</span></td>
+    <td style="font-size:11px;color:var(--tx3)">${p.puesto}</td>
+    <td class="tc" style="color:#dc2626;font-weight:600">${p.falta||'—'}</td>
+    <td class="tc" style="color:#d97706;font-weight:600">${p.retardo||'—'}</td>
+    <td class="tc" style="color:#3b82f6;font-weight:600">${p.permiso||'—'}</td>
+    <td class="tc" style="color:#7c3aed;font-weight:600">${p.incap||'—'}</td>
+    <td class="tc" style="color:#991b1b;font-weight:600">${p.castigo||'—'}</td>
+    <td class="tc" style="color:#065f46;font-weight:600">${p.vacacion||'—'}</td>
+    <td class="tc" style="color:#7f1d1d;font-weight:600">${p.no||'—'}</td>
+    <td class="tc"><span class="badge b-red" style="font-size:11px">${p.total}</span></td>
+  </tr>`).join('');
+}
+
 function renderTopColaboradores(pd) {
   const byPerson = {};
   pd.forEach(p => {
@@ -914,22 +968,33 @@ function renderTopColaboradores(pd) {
       });
     });
   });
-  const arr = Object.values(byPerson).sort((a,b)=>b.total-a.total).slice(0,20);
-  const tb = document.getElementById('top-tbody');
-  if (!arr.length) { tb.innerHTML=`<tr><td colspan="9" style="text-align:center;padding:24px;color:var(--tx4)">Sin incidencias en este período</td></tr>`; return; }
-  tb.innerHTML = arr.map(p=>`<tr>
-    <td style="font-weight:600">${p.name}</td>
-    <td><span style="font-size:10px;font-weight:700;padding:2px 7px;border-radius:6px;background:${p.color}22;color:${p.color}">${p.planta}</span></td>
-    <td style="font-size:11px;color:var(--tx3)">${p.puesto}</td>
-    <td class="tc" style="color:#dc2626;font-weight:600">${p.falta||'—'}</td>
-    <td class="tc" style="color:#d97706;font-weight:600">${p.retardo||'—'}</td>
-    <td class="tc" style="color:#3b82f6;font-weight:600">${p.permiso||'—'}</td>
-    <td class="tc" style="color:#7c3aed;font-weight:600">${p.incap||'—'}</td>
-    <td class="tc" style="color:#991b1b;font-weight:600">${p.castigo||'—'}</td>
-    <td class="tc" style="color:#065f46;font-weight:600">${p.vacacion||'—'}</td>
-    <td class="tc" style="color:#7f1d1d;font-weight:600">${p.no||'—'}</td>
-    <td class="tc"><span class="badge b-red" style="font-size:11px">${p.total}</span></td>
-  </tr>`).join('');
+  // Guardar todos los datos y ordenar por total desc (sin límite de 20)
+  _topAllData = Object.values(byPerson).sort((a,b)=>b.total-a.total);
+
+  // Poblar el selector con todos los colaboradores únicos ordenados
+  const sel = document.getElementById('top-select');
+  if (sel) {
+    const curVal = sel.value;
+    sel.innerHTML = '<option value="">Todos los colaboradores</option>';
+    _topAllData.forEach(p => {
+      const opt = document.createElement('option');
+      opt.value = p.name;
+      opt.textContent = p.name + ' (' + p.planta + ' · ' + p.total + ' inc.)';
+      sel.appendChild(opt);
+    });
+    sel.value = curVal; // mantener selección actual si existe
+  }
+
+  // Limpiar búsqueda al cambiar de período/planta
+  const searchEl = document.getElementById('top-search');
+  if(searchEl) searchEl.value='';
+  if(sel) sel.value='';
+
+  if (!_topAllData.length) {
+    document.getElementById('top-tbody').innerHTML=`<tr><td colspan="11" style="text-align:center;padding:24px;color:var(--tx4)">Sin incidencias en este período</td></tr>`;
+    return;
+  }
+  renderTopRows(_topAllData);
 }
 
 /* ── EXPORTAR EXCEL ── */
