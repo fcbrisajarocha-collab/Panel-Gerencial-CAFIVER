@@ -382,7 +382,7 @@ function doGerLogin() {
   const u = document.getElementById('g-user').value.trim();
   const p = document.getElementById('g-pass').value.trim();
   const err = document.getElementById('g-err');
-  const found = USUARIOS_GER.find(x => x.user.toLowerCase() === u.toLowerCase() && x.pass === p);
+  const found = USUARIOS_GER.find(x => x.user.toLowerCase() === u.toLowerCase() && verifyPasswordGer(x.user, p));
   if (!found) {
     err.textContent = 'Usuario o contraseña incorrectos.';
     return;
@@ -1230,7 +1230,7 @@ function submitPwdChange() {
   if(!cur||!nw||!conf){errEl.textContent='Completa todos los campos.';return;}
   if(nw.length<6){errEl.textContent='Mínimo 6 caracteres.';return;}
   if(nw!==conf){errEl.textContent='Las contraseñas no coinciden.';return;}
-  if(!verifyPassword(_userActivo ? _userActivo.user : '', cur)){errEl.textContent='La contraseña actual es incorrecta.';return;}
+  if(!verifyPasswordGer(_userActivo ? _userActivo.user : '', cur)){errEl.textContent='La contraseña actual es incorrecta.';return;}
   errEl.style.color='#2563eb';errEl.textContent='Guardando...';
   if(!_authCache) _authCache={};
   _authCache[targetId] = nw;
