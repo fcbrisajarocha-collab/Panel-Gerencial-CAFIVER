@@ -190,7 +190,7 @@ tr:hover td{background:var(--bg)}
       </div>
       <div class="sync-dot" id="sync-dot"></div>
       <div class="sync-txt" id="sync-txt">Cargando...</div>
-      <button class="btn-logout" onclick="doLogout()">Cerrar sesión</button>
+      <button onclick="openChangePassword()" style="background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.25);color:#fff;padding:6px 12px;border-radius:8px;font-size:12px;cursor:pointer;font-family:DM Sans,sans-serif">🔒 Cambiar pwd</button><button class="btn-logout" onclick="doLogout()">Cerrar sesión</button>
     </div>
   </div>
 
@@ -279,6 +279,10 @@ tr:hover td{background:var(--bg)}
       <div class="chart-card">
         <div class="chart-title">Incidencias por Tipo</div>
         <div class="chart-wrap"><canvas id="chart-inc-pie"></canvas></div>
+      </div>
+      <div class="chart-card" style="margin-top:12px">
+        <div class="chart-title">Incidencias Disciplinarias (Faltas · Castigos · Retardos)</div>
+        <div class="chart-wrap"><canvas id="chart-disciplina"></canvas></div>
       </div>
     </div>
 
@@ -617,6 +621,7 @@ function render() {
   renderKPIs(plantDataFilt);
   renderChartPlants(plantDataFilt);
   renderIncPie(plantDataFilt);
+  renderChartDisciplina(plantDataFilt);
   renderTrend();
   renderIncRow(plantDataFilt);
   renderSesTable(plantDataFilt);
@@ -830,6 +835,55 @@ function renderTrend() {
 }
 
 /* ── INCIDENCIAS POR PLANTA ── */
+function renderChartDisciplina(pd) {
+  const canvas = document.getElementById('chart-disciplina');
+  if (!canvas) return;
+  if (_charts.disciplina) _charts.disciplina.destroy();
+  const TIPOS = [
+    { label:'Faltas',          color:'#dc2626', key:'falta'   },
+    { label:'Castigos',        color:'#991b1b', key:'castigo' },
+    { label:'Llega Tarde >10', color:'#f59e0b', key:'ret10'   },
+    { label:'Llega Tarde <10', color:'#fbbf24', key:'ret5'    },
+  ];
+  const totals = { falta:0, castigo:0, ret10:0, ret5:0 };
+  pd.forEach(p => {
+    p.sessions.forEach(s => {
+      (s.team||[]).forEach(m => {
+        if (m.status==='FALTA')           totals.falta++;
+        if (m.status==='CASTIGO')         totals.castigo++;
+        if (m.status==='LLEGA TARDE >10'||m.status==='RET. >10') totals.ret10++;
+        if (m.status==='LLEGA TARDE <10'||m.status==='RET. <10') totals.ret5++;
+      });
+    });
+  });
+  _charts.disciplina = new Chart(canvas, {
+    type: 'bar',
+    data: {
+      labels: TIPOS.map(t=>t.label),
+      datasets: [{
+        data: TIPOS.map(t=>totals[t.key]),
+        backgroundColor: TIPOS.map(t=>t.color+'cc'),
+        borderColor: TIPOS.map(t=>t.color),
+        borderWidth: 1,
+        borderRadius: 6,
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      indexAxis: 'y',
+      plugins: {
+        legend: { display: false },
+        tooltip: { callbacks: { label: ctx => ' '+ctx.raw+' registros' } }
+      },
+      scales: {
+        x: { beginAtZero:true, ticks:{ stepSize:1, font:{size:10} }, grid:{color:'#f1f5f9'} },
+        y: { ticks:{ font:{size:11,family:'DM Sans'}, color:'#334155' } }
+      }
+    }
+  });
+}
+
 function renderIncRow(pd) {
   const el = document.getElementById('inc-row');
   // Mapa directo de clave INC_TYPES → campo en stats
@@ -956,7 +1010,8 @@ function renderTopColaboradores(pd) {
         const isCastigo = INC_TYPES.castigo.states.includes(m.status);
         const isVacacion= INC_TYPES.vacacion && INC_TYPES.vacacion.states.includes(m.status);
         const isNo      = INC_TYPES.no && INC_TYPES.no.states.includes(m.status);
-        if (!isFalta&&!isRetardo&&!isPermiso&&!isIncap&&!isCastigo&&!isVacacion&&!isNo) return;
+        // Vacaciones y No asistió reunión se registran en detalle pero NO suman al Top de Incidencias
+        if (!isFalta&&!isRetardo&&!isPermiso&&!isIncap&&!isCastigo) return;
         const cat = p.catalog.find(x=>x.id===m.catId) || p.catalog.find(x=>x.ctrl===m.catId) || p.catalog.find(x=>m.catId && m.catId.endsWith('_'+x.ctrl));
         const key = p.id+'_'+m.catId;
         if (!byPerson[key]) byPerson[key] = { name:cat?.name||'—', planta:p.nombre, color:p.color, puesto:cat?.puesto||'—', falta:0,retardo:0,permiso:0,incap:0,castigo:0,vacacion:0,no:0,total:0 };
@@ -1099,6 +1154,97 @@ function exportarPDF() {
 /* ── PRINT STYLES ── */
 const printStyle = document.createElement('style');
 printStyle.textContent = `@media print{#login-screen{display:none!important}.topbar{background:#000!important;-webkit-print-color-adjust:exact}.btn,.btn-login,.btn-logout,.hbar-right,.date-period{display:none!important}.main{padding:8px}.plant-card,.kpi,.chart-card,.inc-card,.tbl-card{break-inside:avoid}}`;
+
+/* ══════════════════════════════════════════════
+   SISTEMA DE CONTRASEÑAS EN FIREBASE
+   Documento: cafiver_auth/usuarios
+══════════════════════════════════════════════ */
+var _authCache = null;
+var _AUTH_URL = 'https://firestore.googleapis.com/v1/projects/upav-docente/databases/(default)/documents/cafiver_auth/usuarios?key=AIzaSyBjcblj8HNjK8aNZc5PGCTuUYYGopkAmHk';
+
+function loadAuthPasswords() {
+  fetch(_AUTH_URL, {signal:AbortSignal.timeout(5000)})
+    .then(function(r){ return r.ok ? r.json() : null; })
+    .then(function(d){
+      _authCache = {};
+      if(!d) return;
+      var arr = fromFSValue(d.fields && d.fields.usuarios) || [];
+      arr.forEach(function(u){ if(u && u.id) _authCache[u.id]=u.pass; });
+    })
+    .catch(function(){ _authCache = {}; });
+}
+
+function saveAuthPasswords(cb) {
+  var arr = Object.entries(_authCache).map(function(e){ return {id:e[0],pass:e[1]}; });
+  var snap = {usuarios:arr};
+  var keys = Object.keys(snap).map(function(k){return 'updateMask.fieldPaths='+k;}).join('&');
+  var url = _AUTH_URL.replace('?key=','?'+keys+'&key=');
+  fetch(url,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify(objToFS(snap))})
+    .then(function(){ if(cb) cb(null); })
+    .catch(function(e){ if(cb) cb(e); });
+}
+
+function verifyPassword(svId, passInput) {
+  if(_authCache && _authCache[svId] !== undefined) return _authCache[svId] === passInput;
+  var sv = USUARIOS_GER.find(function(s){return s.user===svId;});
+  return sv && sv.pass === passInput;
+}
+
+function openChangePassword() {
+  if(document.getElementById('pwd-overlay')) return;
+  var isAdmin = _userActivo && _userActivo.user === 'Nestor Dali Santiago Altamirano';
+  var opts = isAdmin
+    ? USUARIOS_GER.map(function(sv){return '<option value="'+sv.user+'">'+sv.user+'</option>';}).join('')
+    : '<option value="'+S.auth.svId+'">'+S.auth.supervisor+'</option>';
+  var overlay = document.createElement('div');
+  overlay.id = 'pwd-overlay';
+  overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:500;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(2px)';
+  overlay.innerHTML = '<div style="background:#fff;border-radius:16px;padding:28px;width:100%;max-width:400px;box-shadow:0 24px 64px rgba(0,0,0,.25);font-family:DM Sans,sans-serif">'
+    +'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px">'
+    +'<div style="font-size:17px;font-weight:700;color:#0f172a">🔒 Cambiar contraseña</div>'
+    +'<button onclick="document.getElementById('pwd-overlay').remove()" style="background:#f1f5f9;border:none;width:30px;height:30px;border-radius:50%;cursor:pointer;font-size:15px;color:#64748b">✕</button>'
+    +'</div>'
+    +(isAdmin
+      ? '<div style="margin-bottom:14px"><label style="display:block;font-size:11px;font-weight:600;color:#64748b;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Usuario a modificar</label>'
+        +'<select id="pwd-target" style="width:100%;padding:10px 12px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:13px;color:#0f172a;background:#fff;outline:none">'+opts+'</select></div>'
+      : '<div style="background:#eff6ff;border-radius:8px;padding:10px 12px;font-size:13px;color:#1d4ed8;margin-bottom:14px;font-weight:600">👤 '+S.auth.supervisor+'</div>')
+    +'<div style="margin-bottom:12px"><label style="display:block;font-size:11px;font-weight:600;color:#64748b;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Contraseña actual</label>'
+    +'<input type="password" id="pwd-cur" placeholder="••••••" style="width:100%;padding:10px 12px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:13px;color:#0f172a;outline:none;box-sizing:border-box"></div>'
+    +'<div style="margin-bottom:12px"><label style="display:block;font-size:11px;font-weight:600;color:#64748b;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Nueva contraseña</label>'
+    +'<input type="password" id="pwd-new" placeholder="Mínimo 6 caracteres" style="width:100%;padding:10px 12px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:13px;color:#0f172a;outline:none;box-sizing:border-box"></div>'
+    +'<div style="margin-bottom:16px"><label style="display:block;font-size:11px;font-weight:600;color:#64748b;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Confirmar nueva contraseña</label>'
+    +'<input type="password" id="pwd-conf" placeholder="Repite la nueva contraseña" style="width:100%;padding:10px 12px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:13px;color:#0f172a;outline:none;box-sizing:border-box"></div>'
+    +'<div id="pwd-err" style="color:#dc2626;font-size:12px;margin-bottom:10px;min-height:16px"></div>'
+    +'<button onclick="submitPwdChange()" style="width:100%;padding:12px;background:#2563eb;color:#fff;border:none;border-radius:9px;font-size:14px;font-weight:700;cursor:pointer;font-family:DM Sans,sans-serif">Guardar contraseña</button>'
+    +'</div>';
+  document.body.appendChild(overlay);
+}
+
+function submitPwdChange() {
+  var isAdmin = _userActivo && _userActivo.user === 'Nestor Dali Santiago Altamirano';
+  var targetId = isAdmin ? (document.getElementById('pwd-target') ? document.getElementById('pwd-target').value : _userActivo.user) : _userActivo.user;
+  var cur   = (document.getElementById('pwd-cur').value||'').trim();
+  var nw    = (document.getElementById('pwd-new').value||'').trim();
+  var conf  = (document.getElementById('pwd-conf').value||'').trim();
+  var errEl = document.getElementById('pwd-err');
+  if(!cur||!nw||!conf){errEl.textContent='Completa todos los campos.';return;}
+  if(nw.length<6){errEl.textContent='Mínimo 6 caracteres.';return;}
+  if(nw!==conf){errEl.textContent='Las contraseñas no coinciden.';return;}
+  if(!verifyPassword(_userActivo ? _userActivo.user : '', cur)){errEl.textContent='La contraseña actual es incorrecta.';return;}
+  errEl.style.color='#2563eb';errEl.textContent='Guardando...';
+  if(!_authCache) _authCache={};
+  _authCache[targetId] = nw;
+  saveAuthPasswords(function(err){
+    if(err){errEl.style.color='#dc2626';errEl.textContent='Error: '+err.message;return;}
+    document.getElementById('pwd-overlay').remove();
+    var t=document.createElement('div');
+    t.style.cssText='position:fixed;bottom:16px;right:16px;z-index:9999;background:#dcfce7;border:1px solid #86efac;color:#15803d;padding:10px 16px;border-radius:8px;font-size:12px;font-family:DM Sans,sans-serif;font-weight:600';
+    t.textContent='✓ Contraseña actualizada';
+    document.body.appendChild(t);
+    setTimeout(function(){t.remove();},3000);
+  });
+}
+
 document.head.appendChild(printStyle);
 
 /* ═══════════════════════════════════════
@@ -1205,14 +1351,36 @@ function renderMdTab2(tab) {
         var isInc = Object.values(INC_TYPES).some(function(t){return t.states.includes(m.status);});
         if(!isInc) return;
         var cat=catalog.find(function(x){return x.id===m.catId;})||catalog.find(function(x){return x.ctrl===m.catId;})||catalog.find(function(x){return m.catId&&m.catId.endsWith('_'+x.ctrl);});
-        if(!byP[m.catId]) byP[m.catId]={name:cat?cat.name:'—',puesto:cat?cat.puesto:'—',falta:0,retardo:0,permiso:0,incap:0,castigo:0,total:0};
-        Object.entries(INC_TYPES).forEach(function(e){var k=e[0],t=e[1]; if(t.states.includes(m.status)){byP[m.catId][k]++;byP[m.catId].total++;}});
+        if(!byP[m.catId]) byP[m.catId]={name:cat?cat.name:'—',puesto:cat?cat.puesto:'—',falta:0,retardo:0,permiso:0,incap:0,castigo:0,vacacion:0,no:0,total:0};
+        Object.entries(INC_TYPES).forEach(function(e){var k=e[0],t=e[1]; if(t.states.includes(m.status)){if(byP[m.catId][k]!==undefined)byP[m.catId][k]++;byP[m.catId].total++;}});
       });
     });
     var arr=Object.values(byP).sort(function(a,b){return b.total-a.total;});
     if(!arr.length){el2.innerHTML='<div style="text-align:center;padding:32px;color:#94a3b8">Sin incidencias en este per\u00edodo \uD83C\uDF89</div>';return;}
-    el2.innerHTML='<table style="width:100%;border-collapse:collapse;font-size:12px"><thead><tr style="background:#f8fafc"><th style="padding:9px 12px;font-size:10px;font-weight:600;color:#64748b">Colaborador</th><th style="padding:9px 12px;font-size:10px;font-weight:600;color:#64748b">Puesto</th><th style="padding:9px 12px;font-size:10px;font-weight:600;color:#dc2626;text-align:center">Falt.</th><th style="padding:9px 12px;font-size:10px;font-weight:600;color:#d97706;text-align:center">Ret.</th><th style="padding:9px 12px;font-size:10px;font-weight:600;color:#3b82f6;text-align:center">Perm.</th><th style="padding:9px 12px;font-size:10px;font-weight:600;color:#7c3aed;text-align:center">Inc.</th><th style="padding:9px 12px;font-size:10px;font-weight:600;color:#991b1b;text-align:center">Cast.</th><th style="padding:9px 12px;font-size:10px;font-weight:600;color:#64748b;text-align:center">Total</th></tr></thead><tbody>'+
-      arr.map(function(p){return '<tr style="border-bottom:1px solid #f1f5f9"><td style="padding:9px 12px;font-weight:600">'+p.name+'</td><td style="padding:9px 12px;color:#64748b;font-size:11px">'+p.puesto+'</td><td style="padding:9px 12px;text-align:center;color:#dc2626;font-weight:600">'+(p.falta||'—')+'</td><td style="padding:9px 12px;text-align:center;color:#d97706;font-weight:600">'+(p.retardo||'—')+'</td><td style="padding:9px 12px;text-align:center;color:#3b82f6;font-weight:600">'+(p.permiso||'—')+'</td><td style="padding:9px 12px;text-align:center;color:#7c3aed;font-weight:600">'+(p.incap||'—')+'</td><td style="padding:9px 12px;text-align:center;color:#991b1b;font-weight:600">'+(p.castigo||'—')+'</td><td style="padding:9px 12px;text-align:center"><span style="padding:2px 8px;border-radius:8px;font-size:11px;font-weight:700;background:#fef2f2;color:#991b1b">'+p.total+'</span></td></tr>';}).join('')+
+    el2.innerHTML='<table style="width:100%;border-collapse:collapse;font-size:12px"><thead><tr style="background:#f8fafc">'
+      +'<th style="padding:9px 12px;font-size:10px;font-weight:600;color:#64748b">Colaborador</th>'
+      +'<th style="padding:9px 12px;font-size:10px;font-weight:600;color:#64748b">Puesto</th>'
+      +'<th style="padding:9px 12px;font-size:10px;font-weight:600;color:#dc2626;text-align:center">Falt.</th>'
+      +'<th style="padding:9px 12px;font-size:10px;font-weight:600;color:#d97706;text-align:center">Ret.</th>'
+      +'<th style="padding:9px 12px;font-size:10px;font-weight:600;color:#3b82f6;text-align:center">Perm.</th>'
+      +'<th style="padding:9px 12px;font-size:10px;font-weight:600;color:#7c3aed;text-align:center">Inc.</th>'
+      +'<th style="padding:9px 12px;font-size:10px;font-weight:600;color:#991b1b;text-align:center">Cast.</th>'
+      +'<th style="padding:9px 12px;font-size:10px;font-weight:600;color:#065f46;text-align:center">Vac.</th>'
+      +'<th style="padding:9px 12px;font-size:10px;font-weight:600;color:#7f1d1d;text-align:center">No R.</th>'
+      +'<th style="padding:9px 12px;font-size:10px;font-weight:600;color:#64748b;text-align:center">Total</th>'
+      +'</tr></thead><tbody>'+
+      arr.map(function(p){return '<tr style="border-bottom:1px solid #f1f5f9">'
+        +'<td style="padding:9px 12px;font-weight:600">'+p.name+'</td>'
+        +'<td style="padding:9px 12px;color:#64748b;font-size:11px">'+p.puesto+'</td>'
+        +'<td style="padding:9px 12px;text-align:center;color:#dc2626;font-weight:600">'+(p.falta||'—')+'</td>'
+        +'<td style="padding:9px 12px;text-align:center;color:#d97706;font-weight:600">'+(p.retardo||'—')+'</td>'
+        +'<td style="padding:9px 12px;text-align:center;color:#3b82f6;font-weight:600">'+(p.permiso||'—')+'</td>'
+        +'<td style="padding:9px 12px;text-align:center;color:#7c3aed;font-weight:600">'+(p.incap||'—')+'</td>'
+        +'<td style="padding:9px 12px;text-align:center;color:#991b1b;font-weight:600">'+(p.castigo||'—')+'</td>'
+        +'<td style="padding:9px 12px;text-align:center;color:#065f46;font-weight:600">'+(p.vacacion||'—')+'</td>'
+        +'<td style="padding:9px 12px;text-align:center;color:#7f1d1d;font-weight:600">'+(p.no||'—')+'</td>'
+        +'<td style="padding:9px 12px;text-align:center"><span style="padding:2px 8px;border-radius:8px;font-size:11px;font-weight:700;background:#fef2f2;color:#991b1b">'+p.total+'</span></td>'
+        +'</tr>';}).join('')+
     '</tbody></table>';
   }
 
