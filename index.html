@@ -1195,29 +1195,43 @@ function openChangePassword() {
   var isAdmin = _userActivo && _userActivo.user === 'Nestor Dali Santiago Altamirano';
   var opts = isAdmin
     ? USUARIOS_GER.map(function(sv){return '<option value="'+sv.user+'">'+sv.user+'</option>';}).join('')
-    : '<option value="'+S.auth.svId+'">'+S.auth.supervisor+'</option>';
+    : '<option value="'+(_userActivo?_userActivo.user:'')+'">'+(_userActivo?_userActivo.user:'')+'</option>';
+
   var overlay = document.createElement('div');
   overlay.id = 'pwd-overlay';
-  overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:500;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(2px)';
-  overlay.innerHTML = '<div style="background:#fff;border-radius:16px;padding:28px;width:100%;max-width:400px;box-shadow:0 24px 64px rgba(0,0,0,.25);font-family:DM Sans,sans-serif">'
-    +'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px">'
-    +'<div style="font-size:17px;font-weight:700;color:#0f172a">🔒 Cambiar contraseña</div>'
-    +'<button onclick="document.getElementById('pwd-overlay').remove()" style="background:#f1f5f9;border:none;width:30px;height:30px;border-radius:50%;cursor:pointer;font-size:15px;color:#64748b">✕</button>'
-    +'</div>'
-    +(isAdmin
-      ? '<div style="margin-bottom:14px"><label style="display:block;font-size:11px;font-weight:600;color:#64748b;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Usuario a modificar</label>'
-        +'<select id="pwd-target" style="width:100%;padding:10px 12px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:13px;color:#0f172a;background:#fff;outline:none">'+opts+'</select></div>'
-      : '<div style="background:#eff6ff;border-radius:8px;padding:10px 12px;font-size:13px;color:#1d4ed8;margin-bottom:14px;font-weight:600">👤 '+S.auth.supervisor+'</div>')
-    +'<div style="margin-bottom:12px"><label style="display:block;font-size:11px;font-weight:600;color:#64748b;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Contraseña actual</label>'
-    +'<input type="password" id="pwd-cur" placeholder="••••••" style="width:100%;padding:10px 12px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:13px;color:#0f172a;outline:none;box-sizing:border-box"></div>'
-    +'<div style="margin-bottom:12px"><label style="display:block;font-size:11px;font-weight:600;color:#64748b;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Nueva contraseña</label>'
-    +'<input type="password" id="pwd-new" placeholder="Mínimo 6 caracteres" style="width:100%;padding:10px 12px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:13px;color:#0f172a;outline:none;box-sizing:border-box"></div>'
-    +'<div style="margin-bottom:16px"><label style="display:block;font-size:11px;font-weight:600;color:#64748b;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Confirmar nueva contraseña</label>'
-    +'<input type="password" id="pwd-conf" placeholder="Repite la nueva contraseña" style="width:100%;padding:10px 12px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:13px;color:#0f172a;outline:none;box-sizing:border-box"></div>'
-    +'<div id="pwd-err" style="color:#dc2626;font-size:12px;margin-bottom:10px;min-height:16px"></div>'
-    +'<button onclick="submitPwdChange()" style="width:100%;padding:12px;background:#2563eb;color:#fff;border:none;border-radius:9px;font-size:14px;font-weight:700;cursor:pointer;font-family:DM Sans,sans-serif">Guardar contraseña</button>'
-    +'</div>';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:500;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(2px)';
+
+  var inner = document.createElement('div');
+  inner.style.cssText = 'background:#fff;border-radius:16px;padding:28px;width:100%;max-width:400px;box-shadow:0 24px 64px rgba(0,0,0,.25);font-family:DM Sans,sans-serif';
+
+  var hdr = '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px">'
+    + '<div style="font-size:17px;font-weight:700;color:#0f172a">🔒 Cambiar contraseña</div>'
+    + '<button id="pwd-close-btn" style="background:#f1f5f9;border:none;width:30px;height:30px;border-radius:50%;cursor:pointer;font-size:15px;color:#64748b">✕</button>'
+    + '</div>';
+
+  var userSel = isAdmin
+    ? '<div style="margin-bottom:12px"><label style="display:block;font-size:11px;font-weight:600;color:#64748b;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Usuario a modificar</label>'
+      + '<select id="pwd-target" style="width:100%;padding:10px 12px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:13px;color:#0f172a;background:#fff;outline:none">' + opts + '</select></div>'
+    : '<div style="background:#eff6ff;border-radius:8px;padding:10px 12px;font-size:13px;color:#1d4ed8;margin-bottom:12px;font-weight:600">👤 ' + (_userActivo?_userActivo.user:'') + '</div>';
+
+  var fields = '<div style="margin-bottom:10px"><label style="display:block;font-size:11px;font-weight:600;color:#64748b;text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px">Contraseña actual</label>'
+    + '<input type="password" id="pwd-cur" placeholder="••••••" style="width:100%;padding:10px 12px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:13px;outline:none;box-sizing:border-box"></div>'
+    + '<div style="margin-bottom:10px"><label style="display:block;font-size:11px;font-weight:600;color:#64748b;text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px">Nueva contraseña</label>'
+    + '<input type="password" id="pwd-new" placeholder="Mínimo 6 caracteres" style="width:100%;padding:10px 12px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:13px;outline:none;box-sizing:border-box"></div>'
+    + '<div style="margin-bottom:14px"><label style="display:block;font-size:11px;font-weight:600;color:#64748b;text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px">Confirmar nueva contraseña</label>'
+    + '<input type="password" id="pwd-conf" placeholder="Repite la nueva contraseña" style="width:100%;padding:10px 12px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:13px;outline:none;box-sizing:border-box"></div>'
+    + '<div id="pwd-err" style="color:#dc2626;font-size:12px;margin-bottom:8px;min-height:16px"></div>'
+    + '<button onclick="submitPwdChange()" style="width:100%;padding:12px;background:#2563eb;color:#fff;border:none;border-radius:9px;font-size:14px;font-weight:700;cursor:pointer">Guardar contraseña</button>';
+
+  inner.innerHTML = hdr + userSel + fields;
+  overlay.appendChild(inner);
   document.body.appendChild(overlay);
+
+  // Botón cerrar por separado para evitar problemas de comillas
+  document.getElementById('pwd-close-btn').onclick = function() {
+    var ov = document.getElementById('pwd-overlay');
+    if(ov) ov.remove();
+  };
 }
 
 function submitPwdChange() {
