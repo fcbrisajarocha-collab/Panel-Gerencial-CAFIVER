@@ -228,8 +228,19 @@ tr:hover td{background:var(--bg)}
         <button class="dp-btn"        id="dp-sem"  onclick="setPeriod('semana')">Semana</button>
         <button class="dp-btn"        id="dp-mes"  onclick="setPeriod('mes')">Mes</button>
         <button class="dp-btn"        id="dp-año"  onclick="setPeriod('año')">Año</button>
+        <button class="dp-btn"        id="dp-rango" onclick="toggleRango()">📅 Rango</button>
       </div>
       <span id="period-label" style="font-size:12px;color:var(--tx3);margin-left:4px"></span>
+    </div>
+    <!-- FILTRO DE RANGO PERSONALIZADO -->
+    <div id="rango-bar" style="display:none;align-items:center;gap:10px;padding:8px 16px;background:var(--bg2);border-bottom:1px solid var(--brd);font-size:13px;flex-wrap:wrap">
+      <label style="font-weight:600;color:var(--tx2)">Del</label>
+      <input type="date" id="rango-ini" style="padding:5px 8px;border:1.5px solid var(--brd);border-radius:7px;font-size:12px;font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--tx)">
+      <label style="font-weight:600;color:var(--tx2)">al</label>
+      <input type="date" id="rango-fin" style="padding:5px 8px;border:1.5px solid var(--brd);border-radius:7px;font-size:12px;font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--tx)">
+      <button onclick="aplicarRango()" style="padding:5px 14px;background:#2563eb;color:#fff;border:none;border-radius:7px;font-size:12px;font-weight:700;cursor:pointer;font-family:'DM Sans',sans-serif">Aplicar</button>
+      <button onclick="limpiarRango()" style="padding:5px 14px;background:#f1f5f9;color:#64748b;border:1px solid var(--brd);border-radius:7px;font-size:12px;cursor:pointer;font-family:'DM Sans',sans-serif">✕ Limpiar</button>
+      <span id="rango-label" style="font-size:11px;color:var(--tx3)"></span>
     </div>
 
     <!-- FILTRO POR PLANTA -->
@@ -463,6 +474,7 @@ function isoWeek(dateStr) {
 }
 function isInPeriod(dateStr, refDate, period) {
   if (!dateStr) return false;
+  if (period === 'rango')  return _rangoIni && _rangoFin && dateStr >= _rangoIni && dateStr <= _rangoFin;
   if (period === 'dia')    return dateStr === refDate;
   if (period === 'semana') return isoWeek(dateStr) === isoWeek(refDate);
   if (period === 'mes')    return dateStr.substring(0,7) === refDate.substring(0,7);
@@ -565,6 +577,54 @@ function iniciarPolling() {
 
 /* ── PERÍODO ── */
 let _periodActive = 'dia';
+let _rangoIni = null;
+let _rangoFin = null;
+
+function toggleRango() {
+  var rb = document.getElementById('rango-bar');
+  var isVisible = rb.style.display !== 'none';
+  rb.style.display = isVisible ? 'none' : 'flex';
+  if (!isVisible) {
+    // Pre-rellenar con el mes actual
+    var fecha = document.getElementById('fecha-rep').value || todayStr();
+    document.getElementById('rango-ini').value = fecha.substring(0,7) + '-01';
+    document.getElementById('rango-fin').value = fecha;
+  } else {
+    limpiarRango();
+  }
+}
+
+function aplicarRango() {
+  var ini = document.getElementById('rango-ini').value;
+  var fin = document.getElementById('rango-fin').value;
+  if (!ini || !fin) { alert('Selecciona fecha inicio y fin.'); return; }
+  if (ini > fin) { alert('La fecha inicio debe ser menor o igual a la fecha fin.'); return; }
+  _rangoIni = ini;
+  _rangoFin = fin;
+  _periodActive = 'rango';
+  // Desactivar botones de período
+  ['dia','sem','mes','año'].forEach(function(p) {
+    var btn = document.getElementById('dp-'+p);
+    if(btn) btn.classList.remove('active');
+  });
+  document.getElementById('dp-rango').classList.add('active');
+  document.getElementById('rango-label').textContent =
+    fmtDate(ini) + ' → ' + fmtDate(fin);
+  render();
+}
+
+function limpiarRango() {
+  _rangoIni = null;
+  _rangoFin = null;
+  _periodActive = 'mes';
+  document.getElementById('rango-ini').value = '';
+  document.getElementById('rango-fin').value = '';
+  document.getElementById('rango-label').textContent = '';
+  document.getElementById('dp-rango').classList.remove('active');
+  document.getElementById('rango-bar').style.display = 'none';
+  setPeriod('mes');
+}
+
 function setPeriod(p) {
   _periodActive = p;
   ['dia','sem','mes','año'].forEach(k => {
