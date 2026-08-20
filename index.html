@@ -138,7 +138,6 @@ tr:hover td{background:var(--bg)}
   .main{padding:16px}
 }
 </style>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.3.0/exceljs.min.js"></script>
 </head>
 <body>
 
@@ -1078,114 +1077,27 @@ function exportarIncidenciasExcel() {
   } else { periodo = fecha; }
   var hoy = new Date().toLocaleString('es-MX');
 
-  var wb = new ExcelJS.Workbook();
-  wb.creator = 'CAFIVER Panel Gerencial';
-  wb.created = new Date();
+  function q2(v){ return '"' + String(v||'').replace(/"/g,'""') + '"'; }
 
-  // ══ HOJA 1: INCIDENCIAS ══
-  var ws = wb.addWorksheet('Incidencias', {
-    views: [{state:'frozen', ySplit:8}]
+  var lines = [];
+  lines.push(q2('CAFIVER - Reporte de Incidencias'));
+  lines.push(q2('Periodo') + ',' + q2(periodo));
+  lines.push(q2('Departamento') + ',' + q2(dept||'Todos'));
+  lines.push(q2('Colaboradores') + ',' + q2(arr.length));
+  lines.push(q2('Generado') + ',' + q2(hoy));
+  lines.push('');
+  lines.push([q2('Colaborador'),q2('Departamento'),q2('Puesto'),
+    q2('Faltas'),q2('Llega Tarde'),q2('Permisos'),q2('Incapacidades'),
+    q2('Castigos'),q2('Vacaciones'),q2('No Asistio Reunion'),q2('Total')].join(','));
+
+  arr.forEach(function(p) {
+    lines.push([q2(p.name),q2(p.planta),q2(p.puesto),
+      p.falta||0,p.retardo||0,p.permiso||0,
+      p.incap||0,p.castigo||0,p.vacacion||0,p.no||0,p.total].join(','));
   });
 
-  // Columnas
-  ws.columns = [
-    {key:'col1', width:38}, {key:'col2', width:16}, {key:'col3', width:32},
-    {key:'col4', width:9},  {key:'col5', width:13}, {key:'col6', width:11},
-    {key:'col7', width:15}, {key:'col8', width:11}, {key:'col9', width:13},
-    {key:'col10',width:19}, {key:'col11',width:9}
-  ];
-
-  // Colores
-  var C = {
-    dark:'0F172A', red:'DC2626', amber:'D97706', blue:'1D4ED8',
-    purp:'7C3AED', maroon:'991B1B', teal:'065F46', dk7F:'7F1D1D',
-    white:'FFFFFFFF', lgray:'F8FAFC', border:'E2E8F0', green:'15803D'
-  };
-  function fill(hex){ return {type:'pattern',pattern:'solid',fgColor:{argb:'FF'+hex}}; }
-  function font(hex,sz,bold){ return {name:'Arial',size:sz||9,bold:!!bold,color:{argb:'FF'+hex}}; }
-  function al(h,v){ return {horizontal:h||'left',vertical:v||'middle'}; }
-  function bdr(){
-    var s={style:'thin',color:{argb:'FF'+C.border}};
-    return {top:s,left:s,bottom:s,right:s};
-  }
-
-  // Fila 1: Título
-  ws.mergeCells('A1:K1');
-  var t=ws.getCell('A1');
-  t.value='☕  CAFIVER · Reporte de Incidencias';
-  t.font=font(C.white,14,true); t.fill=fill(C.dark);
-  t.alignment={horizontal:'center',vertical:'middle'}; t.height=32;
-  ws.getRow(1).height=32;
-
-  // Meta filas 2-5
-  var metaRows=[
-    ['Período:', periodo],
-    ['Departamento:', dept||'Todos'],
-    ['Colaboradores con incidencias:', arr.length],
-    ['Generado:', hoy]
-  ];
-  metaRows.forEach(function(mr,i){
-    var r=ws.getRow(2+i);
-    r.height=14;
-    var c1=ws.getCell(2+i,1); c1.value=mr[0];
-    c1.font={name:'Arial',size:9,bold:true,color:{argb:'FF64748B'}};
-    var c2=ws.getCell(2+i,2); c2.value=mr[1];
-    c2.font=font(C.dark,9);
-  });
-  ws.getRow(6).height=6;
-
-  // Fila 7: Headers
-  var HDR_COLS=[
-    {label:'Colaborador',      color:C.dark},
-    {label:'Departamento',     color:C.dark},
-    {label:'Puesto',           color:C.dark},
-    {label:'Faltas',           color:C.red},
-    {label:'Llega Tarde',      color:C.amber},
-    {label:'Permisos',         color:C.blue},
-    {label:'Incapacidades',    color:C.purp},
-    {label:'Castigos',         color:C.maroon},
-    {label:'Vacaciones',       color:C.teal},
-    {label:'No Asistió Reunión',color:C.dk7F},
-    {label:'Total',            color:C.dark}
-  ];
-  var hdrRow=ws.getRow(7); hdrRow.height=30;
-  HDR_COLS.forEach(function(h,ci){
-    var cell=ws.getCell(7,ci+1);
-    cell.value=h.label;
-    cell.fill=fill(h.color);
-    cell.font=font(C.white,9,true);
-    cell.alignment={horizontal:ci>2?'center':'left',vertical:'middle',wrapText:true};
-    cell.border=bdr();
-  });
-
-  // Datos
-  arr.forEach(function(p,ri){
-    var rn=8+ri;
-    var bgHex=ri%2===0?C.lgray:'FFFFFF';
-    var vals=[p.name,p.planta,p.puesto,
-              p.falta||0,p.retardo||0,p.permiso||0,
-              p.incap||0,p.castigo||0,p.vacacion||0,
-              p.no||0,p.total];
-    vals.forEach(function(v,ci){
-      var cell=ws.getCell(rn,ci+1);
-      cell.value=v;
-      cell.fill=fill(bgHex);
-      cell.font=font(ci===10&&p.total>0?C.red:C.dark,9,ci===10);
-      cell.alignment={horizontal:ci>2?'center':'left',vertical:'middle'};
-      cell.border=bdr();
-    });
-    ws.getRow(rn).height=18;
-  });
-
-  // Fila totales
-  var totR=8+arr.length;
-  ws.mergeCells(totR,1,totR,3);
-  var tCell=ws.getCell(totR,1);
-  tCell.value='TOTAL'; tCell.fill=fill(C.dark);
-  tCell.font=font(C.white,10,true); tCell.alignment=al('center');
-  ws.getCell(totR,2).fill=fill(C.dark);
-  ws.getCell(totR,3).fill=fill(C.dark);
-  var totVals=[
+  lines.push('');
+  lines.push([q2('TOTAL'),q2(''),q2(''),
     arr.reduce(function(a,p){return a+(p.falta||0);},0),
     arr.reduce(function(a,p){return a+(p.retardo||0);},0),
     arr.reduce(function(a,p){return a+(p.permiso||0);},0),
@@ -1193,92 +1105,17 @@ function exportarIncidenciasExcel() {
     arr.reduce(function(a,p){return a+(p.castigo||0);},0),
     arr.reduce(function(a,p){return a+(p.vacacion||0);},0),
     arr.reduce(function(a,p){return a+(p.no||0);},0),
-    arr.reduce(function(a,p){return a+p.total;},0)
-  ];
-  totVals.forEach(function(v,i){
-    var cell=ws.getCell(totR,4+i);
-    cell.value=v; cell.fill=fill(C.dark);
-    cell.font=font(C.white,10,true); cell.alignment=al('center');
-  });
-  ws.getRow(totR).height=22;
+    arr.reduce(function(a,p){return a+p.total;},0)].join(','));
 
-  // Auto-filter
-  ws.autoFilter={from:{row:7,column:1},to:{row:7+arr.length,column:11}};
-
-  // ══ HOJA 2: POR DEPARTAMENTO ══
-  var ws2=wb.addWorksheet('Por Departamento');
-  ws2.columns=[
-    {width:20},{width:16},{width:9},{width:13},{width:11},
-    {width:15},{width:11},{width:13},{width:13},{width:10}
-  ];
-  ws2.mergeCells('A1:J1');
-  var t2=ws2.getCell('A1');
-  t2.value='☕  CAFIVER · Resumen por Departamento';
-  t2.font=font(C.white,13,true); t2.fill=fill(C.dark);
-  t2.alignment={horizontal:'center',vertical:'middle'};
-  ws2.getRow(1).height=28;
-
-  var DEPT_C={'Descafeinado':'0EA5E9','Envasado':'F59E0B','PSE':'8B5CF6',
-               'Mantenimiento':'10B981','Almacén':'E11D48','CSP':'0891B2'};
-  var HDR2=['Departamento','Colaboradores','Faltas','Llega Tarde','Permisos',
-            'Incapacidades','Castigos','Vacaciones','No Asistió','Total'];
-  HDR2.forEach(function(h,ci){
-    var cell=ws2.getCell(2,ci+1);
-    cell.value=h; cell.fill=fill(C.dark);
-    cell.font=font(C.white,9,true); cell.alignment=al('center');
-  });
-  ws2.getRow(2).height=24;
-
-  var deptMap={};
-  arr.forEach(function(p){
-    if(!deptMap[p.planta]) deptMap[p.planta]={count:0,f:0,r:0,pe:0,i:0,ca:0,v:0,no:0};
-    var d=deptMap[p.planta];
-    d.count++;d.f+=(p.falta||0);d.r+=(p.retardo||0);d.pe+=(p.permiso||0);
-    d.i+=(p.incap||0);d.ca+=(p.castigo||0);d.v+=(p.vacacion||0);d.no+=(p.no||0);
-  });
-  Object.keys(deptMap).sort().forEach(function(dept2,ri){
-    var x=deptMap[dept2], rn=3+ri, bg=ri%2===0?C.lgray:'FFFFFF';
-    var dc=DEPT_C[dept2]||C.dark;
-    var c1=ws2.getCell(rn,1); c1.value=dept2;
-    c1.font={name:'Arial',size:10,bold:true,color:{argb:'FF'+dc}};
-    c1.fill=fill(bg); c1.alignment=al('left'); c1.border=bdr();
-    var c2=ws2.getCell(rn,2); c2.value=x.count;
-    c2.font=font(C.dark,10,true); c2.fill=fill(bg); c2.alignment=al('center'); c2.border=bdr();
-    var totRow2=x.f+x.r+x.pe+x.i+x.ca+x.v+x.no;
-    [x.f,x.r,x.pe,x.i,x.ca,x.v,x.no,totRow2].forEach(function(v,ci){
-      var cell=ws2.getCell(rn,3+ci);
-      cell.value=v||0; cell.fill=fill(bg);
-      cell.font=font(C.dark,10); cell.alignment=al('center'); cell.border=bdr();
-    });
-    ws2.getRow(rn).height=20;
-  });
-  var trn=3+Object.keys(deptMap).length;
-  ws2.mergeCells(trn,1,trn,2);
-  ws2.getCell(trn,1).value='TOTAL GENERAL';
-  var allTot=[0,0,0,0,0,0,0,0];
-  Object.values(deptMap).forEach(function(x){
-    allTot[0]+=x.count;allTot[1]+=x.f;allTot[2]+=x.r;allTot[3]+=x.pe;
-    allTot[4]+=x.i;allTot[5]+=x.ca;allTot[6]+=x.v;allTot[7]+=x.no;
-  });
-  for(var ci2=1;ci2<=10;ci2++){
-    var tc=ws2.getCell(trn,ci2);
-    tc.fill=fill(C.dark); tc.font=font(C.white,10,true); tc.alignment=al(ci2===1?'left':'center');
-  }
-  allTot.slice(1).forEach(function(v,i){ ws2.getCell(trn,3+i).value=v; });
-  ws2.getCell(trn,2).value=allTot[0];
-  ws2.getCell(trn,10).value=allTot.slice(1).reduce(function(a,b){return a+b;},0);
-  ws2.getRow(trn).height=22;
-
-  // ── Descargar ──
-  wb.xlsx.writeBuffer().then(function(buffer){
-    var blob=new Blob([buffer],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
-    var url=URL.createObjectURL(blob);
-    var a=document.createElement('a');
-    a.href=url;
-    a.download='Reporte_Incidencias_'+(dept||'General')+'_'+fecha+'.xlsx';
-    a.click();
-    URL.revokeObjectURL(url);
-  });
+  var BOM='﻿';
+  var csv=BOM+lines.join('\n');
+  var blob=new Blob([csv],{type:'text/csv;charset=utf-8'});
+  var url=URL.createObjectURL(blob);
+  var a=document.createElement('a');
+  a.href=url;
+  a.download='Incidencias_'+(dept||'General')+'_'+fecha+'.csv';
+  a.click();
+  URL.revokeObjectURL(url);
 }
 
 function renderTopRows(arr) {
