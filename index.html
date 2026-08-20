@@ -1064,7 +1064,23 @@ function exportarIncidenciasExcel() {
   if (!arr.length) { alert('No hay datos para exportar.'); return; }
 
   var fecha   = document.getElementById('fecha-rep').value || todayStr();
-  var periodo = document.getElementById('period-label') ? document.getElementById('period-label').textContent : fecha;
+  // Construir etiqueta de período explícitamente
+  var periodo = '';
+  if (_periodActive === 'rango' && _rangoIni && _rangoFin) {
+    periodo = _rangoIni + ' al ' + _rangoFin;
+  } else if (_periodActive === 'dia') {
+    periodo = 'Día: ' + fecha;
+  } else if (_periodActive === 'semana') {
+    periodo = 'Semana ' + fecha;
+  } else if (_periodActive === 'mes') {
+    var meses = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+    var partes = fecha.split('-');
+    periodo = meses[parseInt(partes[1])-1] + ' ' + partes[0];
+  } else if (_periodActive === 'año') {
+    periodo = 'Año ' + fecha.substring(0,4);
+  } else {
+    periodo = document.getElementById('period-label') ? document.getElementById('period-label').textContent : fecha;
+  }
   var hoy     = new Date().toLocaleString('es-MX');
 
   function q2(v){ return '"' + String(v).replace(/"/g, '""') + '"'; }
