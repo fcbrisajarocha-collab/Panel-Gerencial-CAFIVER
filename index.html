@@ -341,12 +341,23 @@ tr:hover td{background:var(--bg)}
         <div style="display:flex;gap:8px;align-items:center;margin-left:auto;flex-wrap:wrap">
           <input type="text" id="top-search" placeholder="🔍 Buscar colaborador..."
             oninput="filtrarTopColabs()"
-            style="padding:6px 10px;border:1px solid var(--brd);border-radius:7px;font-size:12px;font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--tx);width:200px;outline:none">
+            style="padding:6px 10px;border:1px solid var(--brd);border-radius:7px;font-size:12px;font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--tx);width:180px;outline:none">
+          <select id="top-dept" onchange="filtrarTopColabs()"
+            style="padding:6px 10px;border:1px solid var(--brd);border-radius:7px;font-size:12px;font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--tx);cursor:pointer;outline:none">
+            <option value="">Todos los departamentos</option>
+            <option value="Descafeinado">Descafeinado</option>
+            <option value="Envasado">Envasado</option>
+            <option value="PSE">PSE</option>
+            <option value="Mantenimiento">Mantenimiento</option>
+            <option value="Almacén">Almacén</option>
+            <option value="CSP">CSP</option>
+          </select>
           <select id="top-select" onchange="filtrarTopColabs()"
             style="padding:6px 10px;border:1px solid var(--brd);border-radius:7px;font-size:12px;font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--tx);cursor:pointer;outline:none">
             <option value="">Todos los colaboradores</option>
           </select>
-          <button onclick="limpiarFiltroTop()" class="btn btn-ghost" style="padding:5px 10px;font-size:11px">✕ Limpiar</button>
+          <button onclick="limpiarFiltroTop()" style="padding:5px 10px;font-size:11px;background:#f1f5f9;border:1px solid var(--brd);border-radius:7px;cursor:pointer;color:#64748b">✕ Limpiar</button>
+          <button onclick="exportarIncidenciasExcel()" style="padding:5px 12px;font-size:11px;font-weight:700;background:#15803d;color:#fff;border:none;border-radius:7px;cursor:pointer;font-family:'DM Sans',sans-serif">⬇ Excel</button>
         </div>
         <span style="font-size:11px;color:var(--tx3);width:100%" id="top-count"></span>
       </div>
@@ -1022,20 +1033,89 @@ function renderSesTable(pd) {
 let _topAllData = [];
 
 function filtrarTopColabs() {
-  const q = (document.getElementById('top-search')?.value||'').toLowerCase().trim();
-  const sel = document.getElementById('top-select')?.value||'';
+  const q    = (document.getElementById('top-search')?.value||'').toLowerCase().trim();
+  const sel  = document.getElementById('top-select')?.value||'';
+  const dept = document.getElementById('top-dept')?.value||'';
   let arr = _topAllData;
-  if (q)   arr = arr.filter(p => p.name.toLowerCase().includes(q) || p.planta.toLowerCase().includes(q));
-  if (sel) arr = arr.filter(p => p.name === sel);
+  if (dept) arr = arr.filter(p => p.planta === dept);
+  if (q)    arr = arr.filter(p => p.name.toLowerCase().includes(q) || p.planta.toLowerCase().includes(q));
+  if (sel)  arr = arr.filter(p => p.name === sel);
   renderTopRows(arr);
 }
 
 function limpiarFiltroTop() {
   const s = document.getElementById('top-search');
   const d = document.getElementById('top-select');
+  const dept = document.getElementById('top-dept');
   if(s) s.value='';
   if(d) d.value='';
+  if(dept) dept.value='';
   renderTopRows(_topAllData);
+}
+
+function exportarIncidenciasExcel() {
+  // Obtener datos actualmente visibles (con filtros aplicados)
+  const q    = (document.getElementById('top-search')?.value||'').toLowerCase().trim();
+  const sel  = document.getElementById('top-select')?.value||'';
+  const dept = document.getElementById('top-dept')?.value||'';
+  let arr = _topAllData;
+  if (dept) arr = arr.filter(p => p.planta === dept);
+  if (q)    arr = arr.filter(p => p.name.toLowerCase().includes(q));
+  if (sel)  arr = arr.filter(p => p.name === sel);
+
+  if (!arr.length) { alert('No hay datos para exportar.'); return; }
+
+  // Período activo
+  const fecha  = document.getElementById('fecha-rep').value || todayStr();
+  const periodo = document.getElementById('period-label').textContent || fecha;
+
+  // Construir CSV con BOM para Excel (UTF-8)
+  const BOM = '﻿';
+  const header = ['Colaborador','Departamento','Puesto','Faltas','Llega Tarde','Permisos','Incapacidades','Castigos','Vacaciones','No Asistió Reunión','Total Incidencias'];
+  const rows = arr.map(p => [
+    p.name, p.planta, p.puesto,
+    p.falta||0, p.retardo||0, p.permiso||0, p.incap||0, p.castigo||0,
+    p.vacacion||0, p.no||0, p.total
+  ]);
+
+  // Agregar resumen al final
+  const totFalta   = arr.reduce((a,p)=>a+(p.falta||0),0);
+  const totRetardo = arr.reduce((a,p)=>a+(p.retardo||0),0);
+  const totPermiso = arr.reduce((a,p)=>a+(p.permiso||0),0);
+  const totIncap   = arr.reduce((a,p)=>a+(p.incap||0),0);
+  const totCastigo = arr.reduce((a,p)=>a+(p.castigo||0),0);
+  const totVac     = arr.reduce((a,p)=>a+(p.vacacion||0),0);
+  const totNo      = arr.reduce((a,p)=>a+(p.no||0),0);
+  const totTotal   = arr.reduce((a,p)=>a+p.total,0);
+
+  rows.push(['','','','','','','','','','','']);
+  rows.push(['TOTAL','','',totFalta,totRetardo,totPermiso,totIncap,totCastigo,totVac,totNo,totTotal]);
+
+  const meta = [
+    ['CAFIVER · Reporte de Incidencias'],
+    ['Período:', periodo],
+    ['Departamento:', dept||'Todos'],
+    ['Colaboradores:', arr.length],
+    ['Fecha de generación:', new Date().toLocaleString('es-MX')],
+    [],
+  ];
+
+  const csvRows = [
+    ...meta.map(r => r.map(v=>`"${String(v).replace(/"/g,'""')}"`).join(',')),
+    header.map(h=>`"${h}"`).join(','),
+    ...rows.map(r => r.map(v=>`"${String(v).replace(/"/g,'""')}"`).join(','))
+  ];
+
+  const csv = BOM + csvRows.join('
+');
+  const blob = new Blob([csv], {type:'text/csv;charset=utf-8'});
+  const url  = URL.createObjectURL(blob);
+  const a    = Object.assign(document.createElement('a'), {
+    href: url,
+    download: `Incidencias_${dept||'General'}_${fecha}.csv`
+  });
+  a.click();
+  URL.revokeObjectURL(url);
 }
 
 function renderTopRows(arr) {
