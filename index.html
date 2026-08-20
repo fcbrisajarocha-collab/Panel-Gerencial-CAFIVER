@@ -1054,66 +1054,62 @@ function limpiarFiltroTop() {
 }
 
 function exportarIncidenciasExcel() {
-  // Obtener datos actualmente visibles (con filtros aplicados)
-  const q    = (document.getElementById('top-search')?.value||'').toLowerCase().trim();
-  const sel  = document.getElementById('top-select')?.value||'';
-  const dept = document.getElementById('top-dept')?.value||'';
-  let arr = _topAllData;
-  if (dept) arr = arr.filter(p => p.planta === dept);
-  if (q)    arr = arr.filter(p => p.name.toLowerCase().includes(q));
-  if (sel)  arr = arr.filter(p => p.name === sel);
-
+  var q    = (document.getElementById('top-search') ? document.getElementById('top-search').value : '').toLowerCase().trim();
+  var sel  = document.getElementById('top-select')  ? document.getElementById('top-select').value  : '';
+  var dept = document.getElementById('top-dept')    ? document.getElementById('top-dept').value    : '';
+  var arr  = _topAllData;
+  if (dept) arr = arr.filter(function(p){ return p.planta === dept; });
+  if (q)    arr = arr.filter(function(p){ return p.name.toLowerCase().indexOf(q) >= 0; });
+  if (sel)  arr = arr.filter(function(p){ return p.name === sel; });
   if (!arr.length) { alert('No hay datos para exportar.'); return; }
 
-  // Período activo
-  const fecha  = document.getElementById('fecha-rep').value || todayStr();
-  const periodo = document.getElementById('period-label').textContent || fecha;
+  var fecha   = document.getElementById('fecha-rep').value || todayStr();
+  var periodo = document.getElementById('period-label') ? document.getElementById('period-label').textContent : fecha;
+  var hoy     = new Date().toLocaleString('es-MX');
 
-  // Construir CSV con BOM para Excel (UTF-8)
-  const BOM = '﻿';
-  const header = ['Colaborador','Departamento','Puesto','Faltas','Llega Tarde','Permisos','Incapacidades','Castigos','Vacaciones','No Asistió Reunión','Total Incidencias'];
-  const rows = arr.map(p => [
-    p.name, p.planta, p.puesto,
-    p.falta||0, p.retardo||0, p.permiso||0, p.incap||0, p.castigo||0,
-    p.vacacion||0, p.no||0, p.total
-  ]);
+  function q2(v){ return '"' + String(v).replace(/"/g, '""') + '"'; }
 
-  // Agregar resumen al final
-  const totFalta   = arr.reduce((a,p)=>a+(p.falta||0),0);
-  const totRetardo = arr.reduce((a,p)=>a+(p.retardo||0),0);
-  const totPermiso = arr.reduce((a,p)=>a+(p.permiso||0),0);
-  const totIncap   = arr.reduce((a,p)=>a+(p.incap||0),0);
-  const totCastigo = arr.reduce((a,p)=>a+(p.castigo||0),0);
-  const totVac     = arr.reduce((a,p)=>a+(p.vacacion||0),0);
-  const totNo      = arr.reduce((a,p)=>a+(p.no||0),0);
-  const totTotal   = arr.reduce((a,p)=>a+p.total,0);
+  var lines = [];
+  lines.push(q2('CAFIVER - Reporte de Incidencias'));
+  lines.push(q2('Periodo') + ',' + q2(periodo));
+  lines.push(q2('Departamento') + ',' + q2(dept || 'Todos'));
+  lines.push(q2('Colaboradores') + ',' + q2(arr.length));
+  lines.push(q2('Generado') + ',' + q2(hoy));
+  lines.push('');
+  lines.push([
+    q2('Colaborador'), q2('Departamento'), q2('Puesto'),
+    q2('Faltas'), q2('Llega Tarde'), q2('Permisos'),
+    q2('Incapacidades'), q2('Castigos'), q2('Vacaciones'),
+    q2('No Asistio Reunion'), q2('Total')
+  ].join(','));
 
-  rows.push(['','','','','','','','','','','']);
-  rows.push(['TOTAL','','',totFalta,totRetardo,totPermiso,totIncap,totCastigo,totVac,totNo,totTotal]);
-
-  const meta = [
-    ['CAFIVER · Reporte de Incidencias'],
-    ['Período:', periodo],
-    ['Departamento:', dept||'Todos'],
-    ['Colaboradores:', arr.length],
-    ['Fecha de generación:', new Date().toLocaleString('es-MX')],
-    [],
-  ];
-
-  const csvRows = [
-    ...meta.map(r => r.map(v=>`"${String(v).replace(/"/g,'""')}"`).join(',')),
-    header.map(h=>`"${h}"`).join(','),
-    ...rows.map(r => r.map(v=>`"${String(v).replace(/"/g,'""')}"`).join(','))
-  ];
-
-  const csv = BOM + csvRows.join('
-');
-  const blob = new Blob([csv], {type:'text/csv;charset=utf-8'});
-  const url  = URL.createObjectURL(blob);
-  const a    = Object.assign(document.createElement('a'), {
-    href: url,
-    download: `Incidencias_${dept||'General'}_${fecha}.csv`
+  arr.forEach(function(p) {
+    lines.push([
+      q2(p.name), q2(p.planta), q2(p.puesto),
+      p.falta||0, p.retardo||0, p.permiso||0,
+      p.incap||0, p.castigo||0, p.vacacion||0,
+      p.no||0, p.total
+    ].join(','));
   });
+
+  lines.push('');
+  var tF=arr.reduce(function(a,p){return a+(p.falta||0);},0);
+  var tR=arr.reduce(function(a,p){return a+(p.retardo||0);},0);
+  var tP=arr.reduce(function(a,p){return a+(p.permiso||0);},0);
+  var tI=arr.reduce(function(a,p){return a+(p.incap||0);},0);
+  var tC=arr.reduce(function(a,p){return a+(p.castigo||0);},0);
+  var tV=arr.reduce(function(a,p){return a+(p.vacacion||0);},0);
+  var tN=arr.reduce(function(a,p){return a+(p.no||0);},0);
+  var tT=arr.reduce(function(a,p){return a+p.total;},0);
+  lines.push([q2('TOTAL'),q2(''),q2(''),tF,tR,tP,tI,tC,tV,tN,tT].join(','));
+
+  var BOM = '﻿';
+  var csv  = BOM + lines.join('\n');
+  var blob = new Blob([csv], {type:'text/csv;charset=utf-8'});
+  var url  = URL.createObjectURL(blob);
+  var a    = document.createElement('a');
+  a.href     = url;
+  a.download = 'Incidencias_' + (dept||'General') + '_' + fecha + '.csv';
   a.click();
   URL.revokeObjectURL(url);
 }
