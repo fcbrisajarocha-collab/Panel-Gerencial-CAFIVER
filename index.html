@@ -352,6 +352,12 @@ tr:hover td{background:var(--bg)}
             <option value="Almacén">Almacén</option>
             <option value="CSP">CSP</option>
           </select>
+          <select id="top-tipo" onchange="filtrarTopColabs()"
+            style="padding:6px 10px;border:1px solid var(--brd);border-radius:7px;font-size:12px;font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--tx);cursor:pointer;outline:none">
+            <option value="">Sindicalizado y No Sindicalizado</option>
+            <option value="Sindicalizado">🔵 Sindicalizado</option>
+            <option value="No Sindicalizado">🟡 No Sindicalizado</option>
+          </select>
           <select id="top-select" onchange="filtrarTopColabs()"
             style="padding:6px 10px;border:1px solid var(--brd);border-radius:7px;font-size:12px;font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--tx);cursor:pointer;outline:none">
             <option value="">Todos los colaboradores</option>
@@ -364,7 +370,7 @@ tr:hover td{background:var(--bg)}
       <div class="tbl-wrap">
         <table>
           <thead><tr>
-            <th>Colaborador</th><th>Planta</th><th>Puesto</th>
+            <th>Colaborador</th><th>Planta</th><th>Puesto</th><th>Tipo</th>
             <th class="tc">Faltas</th><th class="tc">Ret.</th>
             <th class="tc">Perm.</th><th class="tc">Inc.</th>
             <th class="tc">Cast.</th><th class="tc" style="color:#065f46">Vac.</th>
@@ -1032,12 +1038,58 @@ function renderSesTable(pd) {
 // Variable global para filtro de colaboradores
 let _topAllData = [];
 
+const TIPO_PUESTO = {
+  // SINDICALIZADOS
+  'ELECTROMECANICO':'Sindicalizado','ELECTROMECANICO B':'Sindicalizado',
+  'ELECTROMECANICO B (LUBRICADOR)':'Sindicalizado','INSTRUMENTISTA':'Sindicalizado',
+  'LUBRICADOR':'Sindicalizado','SOLDADOR':'Sindicalizado',
+  'Coordinador de cafeína':'Sindicalizado','Operador de producción descafeinado':'Sindicalizado',
+  'Operador de oreadoras y máquina Kaack':'Sindicalizado','Obrero de cafeína':'Sindicalizado',
+  'Auxiliar de oreadoras y máquina Kaack':'Sindicalizado',
+  'Obrero general':'Sindicalizado','Operador especializado':'Sindicalizado',
+  'Operador despaletizadora':'Sindicalizado','Operador llenadora':'Sindicalizado',
+  'Operador taponadora':'Sindicalizado','Operador stick y doy pack':'Sindicalizado',
+  'Operador etiquetadoras':'Sindicalizado',
+  'Obrero General de Soluble Esférico':'Sindicalizado',
+  'Operador Técnico de Soluble Esférico':'Sindicalizado',
+  'Operador de Envasado Soluble Esférico':'Sindicalizado',
+  'Operador de Filtros Soluble Esférico':'Sindicalizado',
+  'Operador de Centrifuga Soluble':'Sindicalizado',
+  'Operador de Tostado Soluble Esférico':'Sindicalizado',
+  'Obrero General':'Sindicalizado','Obrero General Maniobras':'Sindicalizado',
+  'Obrero de BS':'Sindicalizado','Operador Montacargas':'Sindicalizado',
+  'Operador TN envasador':'Sindicalizado','Operador de Beneficio Seco':'Sindicalizado',
+  'Operador de electronicas':'Sindicalizado','Localizador inventarios':'Sindicalizado',
+  'Obrero CSP':'Sindicalizado','Operador Tostador CSP':'Sindicalizado',
+  'Operador Envasadoras CSP':'Sindicalizado',
+  // CONFIANZA
+  'Jefe de Instrumentación y Control':'No Sindicalizado',
+  'Jefe de Mantenimiento Electromecánico':'No Sindicalizado',
+  'Coordinador de Instrumentación y Control':'No Sindicalizado',
+  'Asistente Administrativo de Gerencia de Mantenimiento':'No Sindicalizado',
+  'Supervisor de Mantenimiento':'No Sindicalizado','Supervisor de Servicios Generales':'No Sindicalizado',
+  'Programador de Mantenimiento':'No Sindicalizado','Auxiliar de Programador de Mantenimiento':'No Sindicalizado',
+  'Gerente de Planta Descafeinado':'No Sindicalizado','Supervisor de Producción Descafeinado':'No Sindicalizado',
+  'Analista de Envasado':'No Sindicalizado','Jefe de Envasado':'No Sindicalizado',
+  'Supervisor de Envasado':'No Sindicalizado',
+  'Analista de Planta Soluble':'No Sindicalizado','Supervisor de planta soluble':'No Sindicalizado',
+  'Coordinador de Insumos':'No Sindicalizado','Coordinador de PT':'No Sindicalizado',
+  'Supervisor de Almacén de Café':'No Sindicalizado','Jefe de Almacenes':'No Sindicalizado',
+  'Analista CSP':'No Sindicalizado','Asistente Administrativo':'No Sindicalizado',
+  'Supervisor de producción':'No Sindicalizado','Jefe de Produccion':'No Sindicalizado',
+};
+function getTipo(puesto) {
+  return TIPO_PUESTO[puesto] || 'Sindicalizado';
+}
+
 function filtrarTopColabs() {
   const q    = (document.getElementById('top-search')?.value||'').toLowerCase().trim();
   const sel  = document.getElementById('top-select')?.value||'';
   const dept = document.getElementById('top-dept')?.value||'';
+  const tipo = document.getElementById('top-tipo')?.value||'';
   let arr = _topAllData;
   if (dept) arr = arr.filter(p => p.planta === dept);
+  if (tipo) arr = arr.filter(p => p.tipo === tipo);
   if (q)    arr = arr.filter(p => p.name.toLowerCase().includes(q) || p.planta.toLowerCase().includes(q));
   if (sel)  arr = arr.filter(p => p.name === sel);
   renderTopRows(arr);
@@ -1047,9 +1099,11 @@ function limpiarFiltroTop() {
   const s = document.getElementById('top-search');
   const d = document.getElementById('top-select');
   const dept = document.getElementById('top-dept');
+  const tipo = document.getElementById('top-tipo');
   if(s) s.value='';
   if(d) d.value='';
   if(dept) dept.value='';
+  if(tipo) tipo.value='';
   renderTopRows(_topAllData);
 }
 
@@ -1086,18 +1140,18 @@ function exportarIncidenciasExcel() {
   lines.push(q2('Colaboradores') + ',' + q2(arr.length));
   lines.push(q2('Generado') + ',' + q2(hoy));
   lines.push('');
-  lines.push([q2('Colaborador'),q2('Departamento'),q2('Puesto'),
+  lines.push([q2('Colaborador'),q2('Departamento'),q2('Puesto'),q2('Tipo'),
     q2('Faltas'),q2('Llega Tarde'),q2('Permisos'),q2('Incapacidades'),
     q2('Castigos'),q2('Vacaciones'),q2('No Asistio Reunion'),q2('Total')].join(','));
 
   arr.forEach(function(p) {
-    lines.push([q2(p.name),q2(p.planta),q2(p.puesto),
+    lines.push([q2(p.name),q2(p.planta),q2(p.puesto),q2(p.tipo||'Sindicalizado'),
       p.falta||0,p.retardo||0,p.permiso||0,
       p.incap||0,p.castigo||0,p.vacacion||0,p.no||0,p.total].join(','));
   });
 
   lines.push('');
-  lines.push([q2('TOTAL'),q2(''),q2(''),
+  lines.push([q2('TOTAL'),q2(''),q2(''),q2(''),
     arr.reduce(function(a,p){return a+(p.falta||0);},0),
     arr.reduce(function(a,p){return a+(p.retardo||0);},0),
     arr.reduce(function(a,p){return a+(p.permiso||0);},0),
@@ -1131,6 +1185,7 @@ function renderTopRows(arr) {
     <td style="font-weight:600">${p.name}</td>
     <td><span style="font-size:10px;font-weight:700;padding:2px 7px;border-radius:6px;background:${p.color}22;color:${p.color}">${p.planta}</span></td>
     <td style="font-size:11px;color:var(--tx3)">${p.puesto}</td>
+    <td><span style="font-size:10px;font-weight:700;padding:2px 7px;border-radius:6px;background:${p.tipo==='No Sindicalizado'?'#fef9c3':'#dbeafe'};color:${p.tipo==='No Sindicalizado'?'#854d0e':'#1d4ed8'}">${p.tipo||'—'}</span></td>
     <td class="tc" style="color:#dc2626;font-weight:600">${p.falta||'—'}</td>
     <td class="tc" style="color:#d97706;font-weight:600">${p.retardo||'—'}</td>
     <td class="tc" style="color:#3b82f6;font-weight:600">${p.permiso||'—'}</td>
@@ -1161,7 +1216,7 @@ function renderTopColaboradores(pd) {
         if (!isFalta&&!isRetardo&&!isPermiso&&!isIncap&&!isCastigo) return;
         const cat = p.catalog.find(x=>x.id===m.catId) || p.catalog.find(x=>x.ctrl===m.catId) || p.catalog.find(x=>m.catId && m.catId.endsWith('_'+x.ctrl));
         const key = p.id+'_'+m.catId;
-        if (!byPerson[key]) byPerson[key] = { name:cat?.name||'—', planta:p.nombre, color:p.color, puesto:cat?.puesto||'—', falta:0,retardo:0,permiso:0,incap:0,castigo:0,vacacion:0,no:0,total:0 };
+        if (!byPerson[key]) byPerson[key] = { name:cat?.name||'—', planta:p.nombre, color:p.color, puesto:cat?.puesto||'—', tipo:getTipo(cat?.puesto||''), falta:0,retardo:0,permiso:0,incap:0,castigo:0,vacacion:0,no:0,total:0 };
         if (isFalta)    { byPerson[key].falta++;    byPerson[key].total++; }
         if (isRetardo)  { byPerson[key].retardo++;  byPerson[key].total++; }
         if (isPermiso)  { byPerson[key].permiso++;  byPerson[key].total++; }
