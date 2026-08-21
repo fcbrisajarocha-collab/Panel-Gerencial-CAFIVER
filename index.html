@@ -1041,7 +1041,7 @@ let _topAllData = [];
 const TIPO_PUESTO = {
   // SINDICALIZADOS
   'ELECTROMECANICO':'Sindicalizado','ELECTROMECANICO B':'Sindicalizado',
-  'ELECTROMECANICO B (LUBRICADOR)':'Sindicalizado','INSTRUMENTISTA':'Sindicalizado',
+  'ELECTROMECANICO B (LUBRICADOR)':'Sindicalizado','INSTRUMENTISTA':'No Sindicalizado',
   'LUBRICADOR':'Sindicalizado','SOLDADOR':'Sindicalizado',
   'Coordinador de cafeína':'Sindicalizado','Operador de producción descafeinado':'Sindicalizado',
   'Operador de oreadoras y máquina Kaack':'Sindicalizado','Obrero de cafeína':'Sindicalizado',
@@ -1051,7 +1051,7 @@ const TIPO_PUESTO = {
   'Operador taponadora':'Sindicalizado','Operador stick y doy pack':'Sindicalizado',
   'Operador etiquetadoras':'Sindicalizado',
   'Obrero General de Soluble Esférico':'Sindicalizado',
-  'Operador Técnico de Soluble Esférico':'Sindicalizado',
+  'Operador Técnico de Soluble Esférico':'No Sindicalizado',
   'Operador de Envasado Soluble Esférico':'Sindicalizado',
   'Operador de Filtros Soluble Esférico':'Sindicalizado',
   'Operador de Centrifuga Soluble':'Sindicalizado',
@@ -1078,7 +1078,13 @@ const TIPO_PUESTO = {
   'Analista CSP':'No Sindicalizado','Asistente Administrativo':'No Sindicalizado',
   'Supervisor de producción':'No Sindicalizado','Jefe de Produccion':'No Sindicalizado',
 };
-function getTipo(puesto) {
+// Excepciones por número de control (personas específicas)
+const TIPO_EXCEPCION = {
+  '70346': 'No Sindicalizado',  // Angel Solis Guevara — Soldador No Sindicalizado
+};
+
+function getTipo(puesto, ctrl) {
+  if (ctrl && TIPO_EXCEPCION[ctrl]) return TIPO_EXCEPCION[ctrl];
   return TIPO_PUESTO[puesto] || 'Sindicalizado';
 }
 
@@ -1111,8 +1117,10 @@ function exportarIncidenciasExcel() {
   var q    = (document.getElementById('top-search') ? document.getElementById('top-search').value : '').toLowerCase().trim();
   var sel  = document.getElementById('top-select')  ? document.getElementById('top-select').value  : '';
   var dept = document.getElementById('top-dept')    ? document.getElementById('top-dept').value    : '';
+  var tipo = document.getElementById('top-tipo')    ? document.getElementById('top-tipo').value    : '';
   var arr  = _topAllData;
   if (dept) arr = arr.filter(function(p){ return p.planta === dept; });
+  if (tipo) arr = arr.filter(function(p){ return p.tipo === tipo; });
   if (q)    arr = arr.filter(function(p){ return p.name.toLowerCase().indexOf(q) >= 0; });
   if (sel)  arr = arr.filter(function(p){ return p.name === sel; });
   if (!arr.length) { alert('No hay datos para exportar.'); return; }
@@ -1133,43 +1141,83 @@ function exportarIncidenciasExcel() {
 
   function q2(v){ return '"' + String(v||'').replace(/"/g,'""') + '"'; }
 
-  var lines = [];
-  lines.push(q2('CAFIVER - Reporte de Incidencias'));
-  lines.push(q2('Periodo') + ',' + q2(periodo));
-  lines.push(q2('Departamento') + ',' + q2(dept||'Todos'));
-  lines.push(q2('Colaboradores') + ',' + q2(arr.length));
-  lines.push(q2('Generado') + ',' + q2(hoy));
-  lines.push('');
-  lines.push([q2('Colaborador'),q2('Departamento'),q2('Puesto'),q2('Tipo'),
-    q2('Faltas'),q2('Llega Tarde'),q2('Permisos'),q2('Incapacidades'),
-    q2('Castigos'),q2('Vacaciones'),q2('No Asistio Reunion'),q2('Total')].join(','));
+  function buildSheet(datos, nombreDept) {
+    var lines = [];
+    lines.push(q2('CAFIVER - Reporte de Incidencias - ' + nombreDept));
+    lines.push(q2('Periodo') + ',' + q2(periodo));
+    lines.push(q2('Departamento') + ',' + q2(nombreDept));
+    lines.push(q2('Tipo') + ',' + q2(tipo||'Todos'));
+    lines.push(q2('Colaboradores') + ',' + q2(datos.length));
+    lines.push(q2('Generado') + ',' + q2(hoy));
+    lines.push('');
+    lines.push([q2('Colaborador'),q2('Departamento'),q2('Puesto'),q2('Tipo'),
+      q2('Faltas'),q2('Llega Tarde'),q2('Permisos'),q2('Incapacidades'),
+      q2('Castigos'),q2('Vacaciones'),q2('No Asistio Reunion'),q2('Total')].join(','));
+    datos.forEach(function(p) {
+      lines.push([q2(p.name),q2(p.planta),q2(p.puesto),q2(p.tipo||'Sindicalizado'),
+        p.falta||0,p.retardo||0,p.permiso||0,
+        p.incap||0,p.castigo||0,p.vacacion||0,p.no||0,p.total].join(','));
+    });
+    lines.push('');
+    lines.push([q2('TOTAL'),q2(''),q2(''),q2(''),
+      datos.reduce(function(a,p){return a+(p.falta||0);},0),
+      datos.reduce(function(a,p){return a+(p.retardo||0);},0),
+      datos.reduce(function(a,p){return a+(p.permiso||0);},0),
+      datos.reduce(function(a,p){return a+(p.incap||0);},0),
+      datos.reduce(function(a,p){return a+(p.castigo||0);},0),
+      datos.reduce(function(a,p){return a+(p.vacacion||0);},0),
+      datos.reduce(function(a,p){return a+(p.no||0);},0),
+      datos.reduce(function(a,p){return a+p.total;},0)].join(','));
+    return lines.join('\n');
+  }
 
-  arr.forEach(function(p) {
-    lines.push([q2(p.name),q2(p.planta),q2(p.puesto),q2(p.tipo||'Sindicalizado'),
-      p.falta||0,p.retardo||0,p.permiso||0,
-      p.incap||0,p.castigo||0,p.vacacion||0,p.no||0,p.total].join(','));
+  // Hoja general (todos los datos filtrados)
+  var csvGeneral = buildSheet(arr, dept||'General');
+
+  // Una hoja por planta
+  var plantas = ['Descafeinado','Envasado','PSE','Mantenimiento','Almacén','CSP'];
+  var csvsPorPlanta = {};
+  plantas.forEach(function(pl) {
+    var datosPl = arr.filter(function(p){ return p.planta === pl; });
+    if (datosPl.length > 0) csvsPorPlanta[pl] = buildSheet(datosPl, pl);
   });
 
-  lines.push('');
-  lines.push([q2('TOTAL'),q2(''),q2(''),q2(''),
-    arr.reduce(function(a,p){return a+(p.falta||0);},0),
-    arr.reduce(function(a,p){return a+(p.retardo||0);},0),
-    arr.reduce(function(a,p){return a+(p.permiso||0);},0),
-    arr.reduce(function(a,p){return a+(p.incap||0);},0),
-    arr.reduce(function(a,p){return a+(p.castigo||0);},0),
-    arr.reduce(function(a,p){return a+(p.vacacion||0);},0),
-    arr.reduce(function(a,p){return a+(p.no||0);},0),
-    arr.reduce(function(a,p){return a+p.total;},0)].join(','));
+  // Construir ZIP con múltiples CSVs usando un solo archivo combinado
+  // Excel no soporta múltiples hojas en CSV, así que hacemos un CSV multi-sección
+  var BOM = '﻿';
+  var separador = '\n\n' + Array(80).join('=') + '\n';
 
-  var BOM='﻿';
-  var csv=BOM+lines.join('\n');
-  var blob=new Blob([csv],{type:'text/csv;charset=utf-8'});
-  var url=URL.createObjectURL(blob);
-  var a=document.createElement('a');
-  a.href=url;
-  a.download='Incidencias_'+(dept||'General')+'_'+fecha+'.csv';
+  var contenido = csvGeneral;
+
+  // Agregar cada planta como sección separada
+  Object.keys(csvsPorPlanta).forEach(function(pl) {
+    contenido += separador + csvsPorPlanta[pl];
+  });
+
+  // Descargar archivo general
+  var blob = new Blob([BOM + csvGeneral], {type:'text/csv;charset=utf-8'});
+  var url  = URL.createObjectURL(blob);
+  var a    = document.createElement('a');
+  a.href = url;
+  a.download = 'Incidencias_' + (dept||'General') + '_' + fecha + '.csv';
   a.click();
   URL.revokeObjectURL(url);
+
+  // Descargar un CSV por cada planta con datos
+  setTimeout(function() {
+    var plantasConDatos = Object.keys(csvsPorPlanta);
+    plantasConDatos.forEach(function(pl, i) {
+      setTimeout(function() {
+        var b2 = new Blob([BOM + csvsPorPlanta[pl]], {type:'text/csv;charset=utf-8'});
+        var u2 = URL.createObjectURL(b2);
+        var a2 = document.createElement('a');
+        a2.href = u2;
+        a2.download = 'Incidencias_' + pl + '_' + fecha + '.csv';
+        a2.click();
+        URL.revokeObjectURL(u2);
+      }, (i+1) * 500);
+    });
+  }, 500);
 }
 
 function renderTopRows(arr) {
@@ -1216,7 +1264,7 @@ function renderTopColaboradores(pd) {
         if (!isFalta&&!isRetardo&&!isPermiso&&!isIncap&&!isCastigo) return;
         const cat = p.catalog.find(x=>x.id===m.catId) || p.catalog.find(x=>x.ctrl===m.catId) || p.catalog.find(x=>m.catId && m.catId.endsWith('_'+x.ctrl));
         const key = p.id+'_'+m.catId;
-        if (!byPerson[key]) byPerson[key] = { name:cat?.name||'—', planta:p.nombre, color:p.color, puesto:cat?.puesto||'—', tipo:getTipo(cat?.puesto||''), falta:0,retardo:0,permiso:0,incap:0,castigo:0,vacacion:0,no:0,total:0 };
+        if (!byPerson[key]) byPerson[key] = { name:cat?.name||'—', planta:p.nombre, color:p.color, puesto:cat?.puesto||'—', tipo:getTipo(cat?.puesto||'', cat?.ctrl||''), falta:0,retardo:0,permiso:0,incap:0,castigo:0,vacacion:0,no:0,total:0 };
         if (isFalta)    { byPerson[key].falta++;    byPerson[key].total++; }
         if (isRetardo)  { byPerson[key].retardo++;  byPerson[key].total++; }
         if (isPermiso)  { byPerson[key].permiso++;  byPerson[key].total++; }
