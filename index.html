@@ -363,7 +363,7 @@ tr:hover td{background:var(--bg)}
             <option value="">Todos los colaboradores</option>
           </select>
           <button onclick="limpiarFiltroTop()" style="padding:5px 10px;font-size:11px;background:#f1f5f9;border:1px solid var(--brd);border-radius:7px;cursor:pointer;color:#64748b">✕ Limpiar</button>
-          <button onclick="exportarIncidenciasExcel()" style="padding:5px 12px;font-size:11px;font-weight:700;background:#15803d;color:#fff;border:none;border-radius:7px;cursor:pointer;font-family:'DM Sans',sans-serif">⬇ Excel</button>
+          <button onclick="abrirModalDescarga()" style="padding:5px 12px;font-size:11px;font-weight:700;background:#15803d;color:#fff;border:none;border-radius:7px;cursor:pointer;font-family:'DM Sans',sans-serif">⬇ Excel</button>
         </div>
         <span style="font-size:11px;color:var(--tx3);width:100%" id="top-count"></span>
       </div>
@@ -1113,7 +1113,101 @@ function limpiarFiltroTop() {
   renderTopRows(_topAllData);
 }
 
-function exportarIncidenciasExcel() {
+function abrirModalDescarga() {
+  if (document.getElementById('dl-modal')) return;
+
+  // Calcular qué plantas tienen datos actualmente visibles
+  var q    = (document.getElementById('top-search') ? document.getElementById('top-search').value : '').toLowerCase().trim();
+  var sel  = document.getElementById('top-select')  ? document.getElementById('top-select').value  : '';
+  var dept = document.getElementById('top-dept')    ? document.getElementById('top-dept').value    : '';
+  var tipo = document.getElementById('top-tipo')    ? document.getElementById('top-tipo').value    : '';
+  var arr  = _topAllData;
+  if (dept) arr = arr.filter(function(p){ return p.planta === dept; });
+  if (tipo) arr = arr.filter(function(p){ return p.tipo === tipo; });
+  if (q)    arr = arr.filter(function(p){ return p.name.toLowerCase().indexOf(q) >= 0; });
+  if (sel)  arr = arr.filter(function(p){ return p.name === sel; });
+  if (!arr.length) { alert('No hay datos para exportar.'); return; }
+
+  var plantasDisp = [];
+  ['Descafeinado','Envasado','PSE','Mantenimiento','Almacén','CSP'].forEach(function(pl) {
+    if (arr.some(function(p){ return p.planta === pl; })) plantasDisp.push(pl);
+  });
+
+  var ov = document.createElement('div');
+  ov.id = 'dl-modal';
+  ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:600;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(2px)';
+
+  var inner = document.createElement('div');
+  inner.style.cssText = 'background:#fff;border-radius:14px;padding:24px;width:100%;max-width:420px;box-shadow:0 24px 64px rgba(0,0,0,.2);font-family:DM Sans,sans-serif';
+
+  var plantaOpts = plantasDisp.map(function(pl) {
+    var count = arr.filter(function(p){ return p.planta === pl; }).length;
+    return '<label style="display:flex;align-items:center;gap:8px;padding:7px 10px;border-radius:7px;cursor:pointer;border:1px solid #e2e8f0;margin-bottom:6px;font-size:13px">'
+      + '<input type="checkbox" class="dl-chk" value="' + pl + '" style="width:15px;height:15px;cursor:pointer">'
+      + '<span style="font-weight:600;color:#0f172a">' + pl + '</span>'
+      + '<span style="margin-left:auto;font-size:11px;color:#64748b">' + count + ' colaboradores</span>'
+      + '</label>';
+  }).join('');
+
+  inner.innerHTML = '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">'
+    + '<div style="font-size:16px;font-weight:700;color:#0f172a">⬇ Descargar Reporte</div>'
+    + '<button id="dl-close" style="background:#f1f5f9;border:none;width:28px;height:28px;border-radius:50%;cursor:pointer;font-size:14px;color:#64748b">✕</button>'
+    + '</div>'
+    + '<p style="font-size:12px;color:#64748b;margin-bottom:14px">Selecciona qué deseas descargar:</p>'
+
+    // Opción: Todo
+    + '<label style="display:flex;align-items:center;gap:8px;padding:10px 12px;border-radius:8px;cursor:pointer;background:#eff6ff;border:1.5px solid #bfdbfe;margin-bottom:12px;font-size:13px">'
+    + '<input type="radio" name="dl-opt" value="todos" checked style="width:15px;height:15px;cursor:pointer">'
+    + '<div><div style="font-weight:700;color:#1d4ed8">📋 Todos los departamentos</div>'
+    + '<div style="font-size:11px;color:#64748b">' + arr.length + ' colaboradores · 1 archivo</div></div>'
+    + '</label>'
+
+    // Opción: Por planta
+    + '<label style="display:flex;align-items:center;gap:8px;padding:10px 12px;border-radius:8px;cursor:pointer;background:#f0fdf4;border:1.5px solid #bbf7d0;margin-bottom:10px;font-size:13px">'
+    + '<input type="radio" name="dl-opt" value="porplanta" style="width:15px;height:15px;cursor:pointer">'
+    + '<div><div style="font-weight:700;color:#15803d">🗂 Un archivo por departamento</div>'
+    + '<div style="font-size:11px;color:#64748b">' + plantasDisp.length + ' archivos (' + plantasDisp.join(', ') + ')</div></div>'
+    + '</label>'
+
+    // Opción: Seleccionar plantas específicas
+    + '<label style="display:flex;align-items:center;gap:8px;padding:10px 12px;border-radius:8px;cursor:pointer;background:#faf5ff;border:1.5px solid #e9d5ff;margin-bottom:12px;font-size:13px">'
+    + '<input type="radio" name="dl-opt" value="seleccionar" style="width:15px;height:15px;cursor:pointer">'
+    + '<div style="font-weight:700;color:#7c3aed">✔ Seleccionar departamentos específicos</div>'
+    + '</label>'
+
+    // Checkboxes de plantas (ocultos inicialmente)
+    + '<div id="dl-chk-wrap" style="display:none;margin-bottom:14px;padding:0 8px">' + plantaOpts + '</div>'
+
+    + '<button id="dl-confirm" style="width:100%;padding:11px;background:#2563eb;color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer">Descargar</button>';
+
+  ov.appendChild(inner);
+  document.body.appendChild(ov);
+
+  // Mostrar/ocultar checkboxes
+  ov.querySelectorAll('input[name="dl-opt"]').forEach(function(r) {
+    r.addEventListener('change', function() {
+      document.getElementById('dl-chk-wrap').style.display = r.value === 'seleccionar' ? 'block' : 'none';
+    });
+  });
+
+  document.getElementById('dl-close').onclick = function() { ov.remove(); };
+  document.getElementById('dl-confirm').onclick = function() {
+    var opt = ov.querySelector('input[name="dl-opt"]:checked').value;
+    var plantasSelec = [];
+    if (opt === 'todos') {
+      plantasSelec = ['__todos__'];
+    } else if (opt === 'porplanta') {
+      plantasSelec = plantasDisp;
+    } else {
+      ov.querySelectorAll('.dl-chk:checked').forEach(function(chk) { plantasSelec.push(chk.value); });
+      if (!plantasSelec.length) { alert('Selecciona al menos un departamento.'); return; }
+    }
+    ov.remove();
+    exportarIncidenciasExcel(plantasSelec);
+  };
+}
+
+function exportarIncidenciasExcel(plantasSelec) {
   var q    = (document.getElementById('top-search') ? document.getElementById('top-search').value : '').toLowerCase().trim();
   var sel  = document.getElementById('top-select')  ? document.getElementById('top-select').value  : '';
   var dept = document.getElementById('top-dept')    ? document.getElementById('top-dept').value    : '';
@@ -1194,30 +1288,25 @@ function exportarIncidenciasExcel() {
     contenido += separador + csvsPorPlanta[pl];
   });
 
-  // Descargar archivo general
-  var blob = new Blob([BOM + csvGeneral], {type:'text/csv;charset=utf-8'});
-  var url  = URL.createObjectURL(blob);
-  var a    = document.createElement('a');
-  a.href = url;
-  a.download = 'Incidencias_' + (dept||'General') + '_' + fecha + '.csv';
-  a.click();
-  URL.revokeObjectURL(url);
+  function descargar(csv, nombre) {
+    var b = new Blob([BOM + csv], {type:'text/csv;charset=utf-8'});
+    var u = URL.createObjectURL(b);
+    var a = document.createElement('a');
+    a.href=u; a.download=nombre; a.click();
+    URL.revokeObjectURL(u);
+  }
 
-  // Descargar un CSV por cada planta con datos
-  setTimeout(function() {
-    var plantasConDatos = Object.keys(csvsPorPlanta);
-    plantasConDatos.forEach(function(pl, i) {
+  if (!plantasSelec || plantasSelec[0] === '__todos__') {
+    descargar(csvGeneral, 'Incidencias_' + (dept||'General') + '_' + fecha + '.csv');
+  } else {
+    plantasSelec.forEach(function(pl, i) {
       setTimeout(function() {
-        var b2 = new Blob([BOM + csvsPorPlanta[pl]], {type:'text/csv;charset=utf-8'});
-        var u2 = URL.createObjectURL(b2);
-        var a2 = document.createElement('a');
-        a2.href = u2;
-        a2.download = 'Incidencias_' + pl + '_' + fecha + '.csv';
-        a2.click();
-        URL.revokeObjectURL(u2);
-      }, (i+1) * 500);
+        if (csvsPorPlanta[pl]) {
+          descargar(csvsPorPlanta[pl], 'Incidencias_' + pl + '_' + fecha + '.csv');
+        }
+      }, i * 600);
     });
-  }, 500);
+  }
 }
 
 function renderTopRows(arr) {
