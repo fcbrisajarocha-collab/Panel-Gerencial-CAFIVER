@@ -1322,24 +1322,55 @@ function exportarIncidenciasExcel(plantasSelec) {
     URL.revokeObjectURL(u);
   }
 
+  // Preparar todos los archivos a descargar
+  var archivos = [];
+
   if (!plantasSelec || plantasSelec[0] === '__todos__') {
-    descargar(csvGeneral, 'Incidencias_' + (dept||'General') + '_' + fecha + '.csv');
-    setTimeout(function() {
-      descargar(buildDetalle(arr, dept||'General'), 'Detalle_Incidencias_' + (dept||'General') + '_' + fecha + '.csv');
-    }, 600);
+    archivos.push({ csv: csvGeneral,                              nombre: 'Incidencias_'+(dept||'General')+'_'+fecha+'.csv' });
+    archivos.push({ csv: buildDetalle(arr, dept||'General'),      nombre: 'Detalle_'+  (dept||'General')+'_'+fecha+'.csv' });
   } else {
-    plantasSelec.forEach(function(pl, i) {
-      setTimeout(function() {
-        if (csvsPorPlanta[pl]) {
-          descargar(csvsPorPlanta[pl], 'Incidencias_' + pl + '_' + fecha + '.csv');
-          setTimeout(function() {
-            var datosPl = arr.filter(function(p){ return p.planta === pl; });
-            descargar(buildDetalle(datosPl, pl), 'Detalle_Incidencias_' + pl + '_' + fecha + '.csv');
-          }, 400);
-        }
-      }, i * 1200);
+    plantasSelec.forEach(function(pl) {
+      if (csvsPorPlanta[pl]) {
+        var datosPl = arr.filter(function(p){ return p.planta === pl; });
+        archivos.push({ csv: csvsPorPlanta[pl],            nombre: 'Incidencias_'+pl+'_'+fecha+'.csv' });
+        archivos.push({ csv: buildDetalle(datosPl, pl),    nombre: 'Detalle_'+pl+'_'+fecha+'.csv' });
+      }
     });
   }
+
+  // Mostrar panel de descarga con botón por archivo
+  var panel = document.createElement('div');
+  panel.id = 'dl-panel';
+  panel.style.cssText = 'position:fixed;bottom:20px;right:20px;z-index:800;background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:16px;box-shadow:0 8px 32px rgba(0,0,0,.18);font-family:DM Sans,sans-serif;min-width:300px';
+  var items = archivos.map(function(a, i) {
+    var icon = a.nombre.indexOf('Detalle') >= 0 ? '📋' : '📊';
+    var color = a.nombre.indexOf('Detalle') >= 0 ? '#7c3aed' : '#15803d';
+    return '<div style="display:flex;align-items:center;justify-content:space-between;padding:6px 0;border-bottom:1px solid #f1f5f9">'
+      +'<span style="font-size:11px;color:#334155">'+icon+' '+a.nombre+'</span>'
+      +'<button onclick="dlArchivo('+i+')" style="background:'+color+';color:#fff;border:none;padding:4px 10px;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;margin-left:8px">⬇</button>'
+      +'</div>';
+  }).join('');
+  panel.innerHTML = '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">'
+    +'<b style="font-size:13px;color:#0f172a">📁 Archivos listos</b>'
+    +'<button onclick="document.getElementById('dl-panel').remove()" style="background:#f1f5f9;border:none;width:24px;height:24px;border-radius:50%;cursor:pointer;font-size:12px;color:#64748b">✕</button>'
+    +'</div>'
+    + items
+    +'<button onclick="dlTodos()" style="width:100%;margin-top:10px;padding:8px;background:#2563eb;color:#fff;border:none;border-radius:7px;font-size:12px;font-weight:700;cursor:pointer">⬇ Descargar todos</button>';
+  document.body.appendChild(panel);
+
+  // Guardar archivos en scope accesible
+  window._dlArchivos = archivos;
+
+  window.dlArchivo = function(i) {
+    var a = window._dlArchivos[i];
+    if (!a) return;
+    descargar(a.csv, a.nombre);
+  };
+  window.dlTodos = function() {
+    window._dlArchivos.forEach(function(a, i) {
+      setTimeout(function() { descargar(a.csv, a.nombre); }, i * 800);
+    });
+  };
 }
 
 
