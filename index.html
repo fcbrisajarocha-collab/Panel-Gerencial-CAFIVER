@@ -1115,6 +1115,35 @@ function limpiarFiltroTop() {
   renderTopRows(_topAllData);
 }
 
+function buildDetalle(datos, nombreDept, periodo, hoy) {
+  function q2(v){ return '"' + String(v||'').replace(/"/g,'""') + '"'; }
+  var lines = [];
+  lines.push(q2('CAFIVER - Detalle de Incidencias - ' + nombreDept));
+  lines.push(q2('Periodo') + ',' + q2(periodo));
+  lines.push(q2('Generado') + ',' + q2(hoy));
+  lines.push('');
+  lines.push([q2('Fecha'),q2('Colaborador'),q2('Departamento'),q2('Puesto'),
+    q2('Tipo'),q2('Turno'),q2('Incidencia')].join(','));
+  var TURN_S = {'1':'T1 07:00-15:00','2':'T2 15:00-23:00','3':'T3 23:00-07:00','mix':'MIX'};
+  var STATUS_L = {
+    'FALTA':'Falta','LLEGA TARDE >10':'Llega Tarde >10','LLEGA TARDE <10':'Llega Tarde <10',
+    'RET. >10':'Llega Tarde >10','RET. <10':'Llega Tarde <10',
+    'PSG':'Permiso Sin Goce','PCG':'Permiso Con Goce','P. ENTRADA TARDE':'P. Entrada Tarde',
+    'INCAPACIDAD':'Incapacidad','CASTIGO':'Castigo'
+  };
+  datos.forEach(function(p) {
+    (p.detalle||[]).sort(function(a,b){ return a.fecha.localeCompare(b.fecha); })
+    .forEach(function(d) {
+      var fp=d.fecha.split('-'); var ff=fp[2]+'/'+fp[1]+'/'+fp[0];
+      lines.push([q2(ff),q2(p.name),q2(p.planta),q2(p.puesto),
+        q2(p.tipo||'Sindicalizado'),
+        q2(TURN_S[String(d.turno)]||'T'+d.turno),
+        q2(STATUS_L[d.status]||d.status)].join(','));
+    });
+  });
+  return '﻿' + lines.join('\n');
+}
+
 function abrirModalDescarga() {
   if (document.getElementById('dl-modal')) return;
 
@@ -1237,30 +1266,6 @@ function exportarIncidenciasExcel(plantasSelec) {
 
   function q2(v){ return '"' + String(v||'').replace(/"/g,'""') + '"'; }
 
-  function buildDetalle(datos, nombreDept) {
-    var lines = [];
-    lines.push(q2('CAFIVER - Detalle de Incidencias - ' + nombreDept));
-    lines.push(q2('Periodo') + ',' + q2(periodo));
-    lines.push(q2('Generado') + ',' + q2(hoy));
-    lines.push('');
-    lines.push([q2('Fecha'),q2('Colaborador'),q2('Departamento'),q2('Puesto'),q2('Tipo'),q2('Turno'),q2('Incidencia')].join(','));
-    var TURN_S = {'1':'T1 07:00-15:00','2':'T2 15:00-23:00','3':'T3 23:00-07:00','mix':'MIX'};
-    var STATUS_L = {
-      'FALTA':'Falta','LLEGA TARDE >10':'Llega Tarde >10','LLEGA TARDE <10':'Llega Tarde <10',
-      'RET. >10':'Llega Tarde >10','RET. <10':'Llega Tarde <10',
-      'PSG':'Permiso Sin Goce','PCG':'Permiso Con Goce','P. ENTRADA TARDE':'P. Entrada Tarde',
-      'INCAPACIDAD':'Incapacidad','CASTIGO':'Castigo'
-    };
-    datos.forEach(function(p) {
-      (p.detalle||[]).sort(function(a,b){return a.fecha.localeCompare(b.fecha);}).forEach(function(d) {
-        var fp=d.fecha.split('-'); var ff=fp[2]+'/'+fp[1]+'/'+fp[0];
-        lines.push([q2(ff),q2(p.name),q2(p.planta),q2(p.puesto),q2(p.tipo||'Sindicalizado'),
-          q2(TURN_S[String(d.turno)]||'T'+d.turno),q2(STATUS_L[d.status]||d.status)].join(','));
-      });
-    });
-    return lines.join('\n');
-  }
-
   function buildSheet(datos, nombreDept) {
     var lines = [];
     lines.push(q2('CAFIVER - Reporte de Incidencias - ' + nombreDept));
@@ -1315,7 +1320,9 @@ function exportarIncidenciasExcel(plantasSelec) {
   });
 
   function descargar(csv, nombre) {
-    var b = new Blob([BOM + csv], {type:'text/csv;charset=utf-8'});
+    // BOM ya incluido en buildDetalle; buildSheet no lo tiene
+    var contenido = csv.startsWith('﻿') ? csv : BOM + csv;
+    var b = new Blob([contenido], {type:'text/csv;charset=utf-8'});
     var u = URL.createObjectURL(b);
     var a = document.createElement('a');
     a.href=u; a.download=nombre; a.click();
@@ -1327,13 +1334,13 @@ function exportarIncidenciasExcel(plantasSelec) {
 
   if (!plantasSelec || plantasSelec[0] === '__todos__') {
     archivos.push({ csv: csvGeneral,                              nombre: 'Incidencias_'+(dept||'General')+'_'+fecha+'.csv' });
-    archivos.push({ csv: buildDetalle(arr, dept||'General'),      nombre: 'Detalle_'+  (dept||'General')+'_'+fecha+'.csv' });
+    archivos.push({ csv: buildDetalle(arr, dept||'General', periodo, hoy),      nombre: 'Detalle_'+  (dept||'General')+'_'+fecha+'.csv' });
   } else {
     plantasSelec.forEach(function(pl) {
       if (csvsPorPlanta[pl]) {
         var datosPl = arr.filter(function(p){ return p.planta === pl; });
         archivos.push({ csv: csvsPorPlanta[pl],            nombre: 'Incidencias_'+pl+'_'+fecha+'.csv' });
-        archivos.push({ csv: buildDetalle(datosPl, pl),    nombre: 'Detalle_'+pl+'_'+fecha+'.csv' });
+        archivos.push({ csv: buildDetalle(datosPl, pl, periodo, hoy),    nombre: 'Detalle_'+pl+'_'+fecha+'.csv' });
       }
     });
   }
