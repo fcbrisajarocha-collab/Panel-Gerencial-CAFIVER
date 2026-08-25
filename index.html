@@ -364,6 +364,7 @@ tr:hover td{background:var(--bg)}
           </select>
           <button onclick="limpiarFiltroTop()" style="padding:5px 10px;font-size:11px;background:#f1f5f9;border:1px solid var(--brd);border-radius:7px;cursor:pointer;color:#64748b">✕ Limpiar</button>
           <button onclick="abrirModalDescarga()" style="padding:5px 12px;font-size:11px;font-weight:700;background:#15803d;color:#fff;border:none;border-radius:7px;cursor:pointer;font-family:'DM Sans',sans-serif">⬇ Excel</button>
+          <button onclick="generarPDFEjecutivo()" style="padding:5px 12px;font-size:11px;font-weight:700;background:#dc2626;color:#fff;border:none;border-radius:7px;cursor:pointer;font-family:'DM Sans',sans-serif">📄 PDF</button>
         </div>
         <span style="font-size:11px;color:var(--tx3);width:100%" id="top-count"></span>
       </div>
@@ -1142,6 +1143,271 @@ function buildDetalle(datos, nombreDept, periodo, hoy) {
     });
   });
   return '﻿' + lines.join('\n');
+}
+
+function generarPDFEjecutivo() {
+  // Obtener datos con filtros activos
+  var q    = (document.getElementById('top-search') ? document.getElementById('top-search').value : '').toLowerCase().trim();
+  var sel  = document.getElementById('top-select')  ? document.getElementById('top-select').value  : '';
+  var dept = document.getElementById('top-dept')    ? document.getElementById('top-dept').value    : '';
+  var tipo = document.getElementById('top-tipo')    ? document.getElementById('top-tipo').value    : '';
+  var arr  = _topAllData;
+  if (dept) arr = arr.filter(function(p){ return p.planta === dept; });
+  if (tipo) arr = arr.filter(function(p){ return p.tipo === tipo; });
+  if (q)    arr = arr.filter(function(p){ return p.name.toLowerCase().indexOf(q) >= 0; });
+  if (sel)  arr = arr.filter(function(p){ return p.name === sel; });
+
+  if (!arr.length) { alert('No hay datos para generar el PDF.'); return; }
+
+  var fecha = document.getElementById('fecha-rep').value || todayStr();
+  var periodo = '';
+  if (_periodActive === 'rango' && _rangoIni && _rangoFin) {
+    periodo = _rangoIni + ' al ' + _rangoFin;
+  } else if (_periodActive === 'dia') {
+    periodo = 'Día: ' + fecha;
+  } else if (_periodActive === 'mes') {
+    var meses=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+    var p2=fecha.split('-'); periodo=meses[parseInt(p2[1])-1]+' '+p2[0];
+  } else if (_periodActive === 'año') {
+    periodo = 'Año ' + fecha.substring(0,4);
+  } else { periodo = fecha; }
+
+  var hoy = new Date().toLocaleString('es-MX');
+  var totalInc = arr.reduce(function(a,p){return a+p.total;},0);
+  var totalFalt = arr.reduce(function(a,p){return a+(p.falta||0);},0);
+  var totalRet  = arr.reduce(function(a,p){return a+(p.retardo||0);},0);
+  var totalPerm = arr.reduce(function(a,p){return a+(p.permiso||0);},0);
+  var totalIncp = arr.reduce(function(a,p){return a+(p.incap||0);},0);
+  var totalCast = arr.reduce(function(a,p){return a+(p.castigo||0);},0);
+  var totalVac  = arr.reduce(function(a,p){return a+(p.vacacion||0);},0);
+  var totalNo   = arr.reduce(function(a,p){return a+(p.no||0);},0);
+
+  // Resumen por planta
+  var porPlanta = {};
+  arr.forEach(function(p) {
+    if (!porPlanta[p.planta]) porPlanta[p.planta] = {color:p.color,total:0,f:0,r:0,pe:0,i:0,ca:0,v:0,no:0,colab:0};
+    var d=porPlanta[p.planta];
+    d.colab++;d.total+=p.total;d.f+=(p.falta||0);d.r+=(p.retardo||0);
+    d.pe+=(p.permiso||0);d.i+=(p.incap||0);d.ca+=(p.castigo||0);
+    d.v+=(p.vacacion||0);d.no+=(p.no||0);
+  });
+
+  // Top 10 colaboradores
+  var top10 = arr.slice(0,10);
+
+  // Resumen por tipo
+  var sindicalizados = arr.filter(function(p){return p.tipo==='Sindicalizado';});
+  var noSindicalizados = arr.filter(function(p){return p.tipo==='No Sindicalizado';});
+  var incSind = sindicalizados.reduce(function(a,p){return a+p.total;},0);
+  var incNoSind = noSindicalizados.reduce(function(a,p){return a+p.total;},0);
+
+  // Construir HTML del PDF
+  var plantasRows = Object.keys(porPlanta).sort().map(function(pl) {
+    var d=porPlanta[pl];
+    return '<tr>'
+      +'<td style="padding:6px 10px;border-bottom:1px solid #e2e8f0;font-weight:600;color:'+d.color+'">'+pl+'</td>'
+      +'<td style="padding:6px 10px;border-bottom:1px solid #e2e8f0;text-align:center">'+d.colab+'</td>'
+      +'<td style="padding:6px 10px;border-bottom:1px solid #e2e8f0;text-align:center;color:#dc2626;font-weight:600">'+(d.f||'-')+'</td>'
+      +'<td style="padding:6px 10px;border-bottom:1px solid #e2e8f0;text-align:center;color:#d97706;font-weight:600">'+(d.r||'-')+'</td>'
+      +'<td style="padding:6px 10px;border-bottom:1px solid #e2e8f0;text-align:center;color:#3b82f6;font-weight:600">'+(d.pe||'-')+'</td>'
+      +'<td style="padding:6px 10px;border-bottom:1px solid #e2e8f0;text-align:center;color:#7c3aed;font-weight:600">'+(d.i||'-')+'</td>'
+      +'<td style="padding:6px 10px;border-bottom:1px solid #e2e8f0;text-align:center;color:#991b1b;font-weight:600">'+(d.ca||'-')+'</td>'
+      +'<td style="padding:6px 10px;border-bottom:1px solid #e2e8f0;text-align:center;color:#065f46;font-weight:600">'+(d.v||'-')+'</td>'
+      +'<td style="padding:6px 10px;border-bottom:1px solid #e2e8f0;text-align:center;font-weight:700">'+d.total+'</td>'
+      +'</tr>';
+  }).join('');
+
+  var top10Rows = top10.map(function(p,i) {
+    var detFechas = (p.detalle||[]).sort(function(a,b){return a.fecha.localeCompare(b.fecha);})
+      .map(function(d){
+        var fp=d.fecha.split('-');
+        var STATUS_L={'FALTA':'Falta','LLEGA TARDE >10':'LT >10','LLEGA TARDE <10':'LT <10',
+          'RET. >10':'LT >10','RET. <10':'LT <10','PSG':'PSG','PCG':'PCG',
+          'P. ENTRADA TARDE':'P.Ent.','INCAPACIDAD':'Incap.','CASTIGO':'Castigo'};
+        return fp[2]+'/'+fp[1]+': '+(STATUS_L[d.status]||d.status);
+      }).join(' · ');
+    return '<tr style="background:'+(i%2===0?'#f8fafc':'#fff')+'">'
+      +'<td style="padding:6px 10px;border-bottom:1px solid #e2e8f0;font-weight:600;font-size:11px">'+p.name+'</td>'
+      +'<td style="padding:6px 10px;border-bottom:1px solid #e2e8f0;font-size:10px"><span style="background:'+p.color+'22;color:'+p.color+';padding:1px 6px;border-radius:4px;font-weight:700">'+p.planta+'</span></td>'
+      +'<td style="padding:6px 10px;border-bottom:1px solid #e2e8f0;font-size:10px;color:#64748b">'+p.puesto+'</td>'
+      +'<td style="padding:6px 10px;border-bottom:1px solid #e2e8f0;text-align:center;font-weight:700;color:#dc2626">'+p.total+'</td>'
+      +'<td style="padding:6px 10px;border-bottom:1px solid #e2e8f0;font-size:10px;color:#64748b">'+detFechas+'</td>'
+      +'</tr>';
+  }).join('');
+
+  // Barra de incidencias por tipo (%)
+  var maxInc = Math.max(totalFalt,totalRet,totalPerm,totalIncp,totalCast,1);
+  function barra(val,color,label) {
+    var pct = totalInc ? Math.round(val/totalInc*100) : 0;
+    return '<div style="margin-bottom:8px">'
+      +'<div style="display:flex;justify-content:space-between;font-size:10px;margin-bottom:2px">'
+      +'<span style="color:#334155;font-weight:600">'+label+'</span>'
+      +'<span style="color:'+color+';font-weight:700">'+val+' ('+pct+'%)</span>'
+      +'</div>'
+      +'<div style="height:8px;background:#f1f5f9;border-radius:4px">'
+      +'<div style="height:100%;width:'+pct+'%;background:'+color+';border-radius:4px"></div>'
+      +'</div></div>';
+  }
+
+  var html = '<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8">'
+    +'<title>Reporte Ejecutivo CAFIVER</title>'
+    +'<style>'
+    +'@page{size:A4;margin:15mm 12mm}'
+    +'*{box-sizing:border-box;margin:0;padding:0}'
+    +'body{font-family:Arial,sans-serif;font-size:11px;color:#0f172a;background:#fff}'
+    +'.page-break{page-break-before:always}'
+    +'table{width:100%;border-collapse:collapse;font-size:10px}'
+    +'th{background:#0f172a;color:#fff;padding:7px 10px;text-align:left;font-size:10px}'
+    +'th.tc{text-align:center}'
+    +'</style></head><body>'
+
+    // PORTADA / HEADER
+    +'<div style="background:#0f172a;padding:20px 24px;border-radius:6px;margin-bottom:16px">'
+    +'<div style="display:flex;justify-content:space-between;align-items:center">'
+    +'<div>'
+    +'<div style="font-size:20px;font-weight:700;color:#fff">☕ CAFIVER</div>'
+    +'<div style="font-size:13px;color:#94a3b8;margin-top:2px">Reporte Ejecutivo de Incidencias</div>'
+    +'</div>'
+    +'<div style="text-align:right">'
+    +'<div style="font-size:12px;color:#cbd5e1">Período</div>'
+    +'<div style="font-size:14px;font-weight:700;color:#fff">'+periodo+'</div>'
+    +'<div style="font-size:10px;color:#94a3b8;margin-top:4px">Generado: '+hoy+'</div>'
+    +'</div>'
+    +'</div>'
+    +'</div>'
+
+    // FILTROS ACTIVOS
+    +(dept||tipo ? '<div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:6px;padding:8px 14px;margin-bottom:14px;font-size:10px;color:#1d4ed8">'
+    +'<b>Filtros activos:</b>'+(dept?' Departamento: <b>'+dept+'</b>':'')+(tipo?' · Tipo: <b>'+tipo+'</b>':'')+'</div>' : '')
+
+    // KPIs PRINCIPALES
+    +'<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:16px">'
+    +'<div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;padding:12px;text-align:center">'
+    +'<div style="font-size:24px;font-weight:700;color:#0f172a">'+arr.length+'</div>'
+    +'<div style="font-size:10px;color:#64748b;margin-top:2px">COLABORADORES</div></div>'
+    +'<div style="background:#fef2f2;border:1px solid #fecaca;border-radius:6px;padding:12px;text-align:center">'
+    +'<div style="font-size:24px;font-weight:700;color:#dc2626">'+totalInc+'</div>'
+    +'<div style="font-size:10px;color:#64748b;margin-top:2px">TOTAL INCIDENCIAS</div></div>'
+    +'<div style="background:#fef9c3;border:1px solid #fde68a;border-radius:6px;padding:12px;text-align:center">'
+    +'<div style="font-size:24px;font-weight:700;color:#854d0e">'+sindicalizados.length+'</div>'
+    +'<div style="font-size:10px;color:#64748b;margin-top:2px">SINDICALIZADOS</div></div>'
+    +'<div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:6px;padding:12px;text-align:center">'
+    +'<div style="font-size:24px;font-weight:700;color:#1d4ed8">'+noSindicalizados.length+'</div>'
+    +'<div style="font-size:10px;color:#64748b;margin-top:2px">NO SINDICALIZADOS</div></div>'
+    +'</div>'
+
+    // DISTRIBUCIÓN POR TIPO DE INCIDENCIA
+    +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:16px">'
+    +'<div style="border:1px solid #e2e8f0;border-radius:6px;padding:14px">'
+    +'<div style="font-size:12px;font-weight:700;margin-bottom:10px;color:#0f172a">Distribución de Incidencias</div>'
+    +barra(totalFalt,'#dc2626','Faltas')
+    +barra(totalRet, '#d97706','Llega Tarde')
+    +barra(totalPerm,'#3b82f6','Permisos')
+    +barra(totalIncp,'#7c3aed','Incapacidades')
+    +barra(totalCast,'#991b1b','Castigos')
+    +barra(totalVac, '#065f46','Vacaciones')
+    +barra(totalNo,  '#7f1d1d','No asistió reunión')
+    +'</div>'
+
+    // RESUMEN SINDICALIZADO VS NO SINDICALIZADO
+    +'<div style="border:1px solid #e2e8f0;border-radius:6px;padding:14px">'
+    +'<div style="font-size:12px;font-weight:700;margin-bottom:10px;color:#0f172a">Por Tipo de Trabajador</div>'
+    +'<div style="margin-bottom:12px">'
+    +'<div style="display:flex;justify-content:space-between;margin-bottom:4px">'
+    +'<span style="font-weight:600;color:#1d4ed8">Sindicalizado</span>'
+    +'<span style="font-weight:700">'+incSind+' inc · '+sindicalizados.length+' colab</span>'
+    +'</div>'
+    +'<div style="height:12px;background:#dbeafe;border-radius:4px">'
+    +'<div style="height:100%;width:'+(totalInc?Math.round(incSind/totalInc*100):0)+'%;background:#1d4ed8;border-radius:4px"></div>'
+    +'</div></div>'
+    +'<div>'
+    +'<div style="display:flex;justify-content:space-between;margin-bottom:4px">'
+    +'<span style="font-weight:600;color:#d97706">No Sindicalizado</span>'
+    +'<span style="font-weight:700">'+incNoSind+' inc · '+noSindicalizados.length+' colab</span>'
+    +'</div>'
+    +'<div style="height:12px;background:#fef3c7;border-radius:4px">'
+    +'<div style="height:100%;width:'+(totalInc?Math.round(incNoSind/totalInc*100):0)+'%;background:#d97706;border-radius:4px"></div>'
+    +'</div></div>'
+    +'<div style="margin-top:14px;padding-top:12px;border-top:1px solid #f1f5f9">'
+    +'<div style="font-size:10px;color:#64748b;margin-bottom:6px"><b>Promedio de incidencias:</b></div>'
+    +'<div style="display:flex;gap:10px">'
+    +'<div style="background:#eff6ff;border-radius:6px;padding:8px 12px;flex:1;text-align:center">'
+    +'<div style="font-size:16px;font-weight:700;color:#1d4ed8">'+(sindicalizados.length?Math.round(incSind/sindicalizados.length*10)/10:0)+'</div>'
+    +'<div style="font-size:9px;color:#64748b">por sindicalizado</div></div>'
+    +'<div style="background:#fef9c3;border-radius:6px;padding:8px 12px;flex:1;text-align:center">'
+    +'<div style="font-size:16px;font-weight:700;color:#854d0e">'+(noSindicalizados.length?Math.round(incNoSind/noSindicalizados.length*10)/10:0)+'</div>'
+    +'<div style="font-size:9px;color:#64748b">por no sindicalizado</div></div>'
+    +'</div></div>'
+    +'</div></div>'
+
+    // RESUMEN POR DEPARTAMENTO
+    +'<div style="margin-bottom:16px">'
+    +'<div style="font-size:12px;font-weight:700;margin-bottom:8px;color:#0f172a;border-left:4px solid #0f172a;padding-left:8px">Resumen por Departamento</div>'
+    +'<table><thead><tr>'
+    +'<th>Departamento</th><th class="tc">Colabs</th>'
+    +'<th class="tc" style="color:#fca5a5">Faltas</th>'
+    +'<th class="tc" style="color:#fcd34d">L.Tarde</th>'
+    +'<th class="tc" style="color:#93c5fd">Permisos</th>'
+    +'<th class="tc" style="color:#c4b5fd">Incap.</th>'
+    +'<th class="tc" style="color:#fca5a5">Castigos</th>'
+    +'<th class="tc" style="color:#6ee7b7">Vacac.</th>'
+    +'<th class="tc">Total</th>'
+    +'</tr></thead><tbody>'+plantasRows+'</tbody></table>'
+    +'</div>'
+
+    // TOP 10 CON DETALLE DE FECHAS
+    +'<div class="page-break" style="margin-bottom:10px">'
+    +'<div style="font-size:12px;font-weight:700;margin-bottom:8px;color:#0f172a;border-left:4px solid #dc2626;padding-left:8px">Top '+Math.min(10,arr.length)+' Colaboradores con Más Incidencias</div>'
+    +'<table><thead><tr>'
+    +'<th style="width:22%">Colaborador</th>'
+    +'<th style="width:10%">Planta</th>'
+    +'<th style="width:20%">Puesto</th>'
+    +'<th class="tc" style="width:6%">Total</th>'
+    +'<th style="width:42%">Fechas de incidencias</th>'
+    +'</tr></thead><tbody>'+top10Rows+'</tbody></table>'
+    +'</div>'
+
+    // DETALLE COMPLETO
+    +'<div style="margin-top:16px">'
+    +'<div style="font-size:12px;font-weight:700;margin-bottom:8px;color:#0f172a;border-left:4px solid #7c3aed;padding-left:8px">Detalle Completo de Incidencias</div>'
+    +'<table><thead><tr>'
+    +'<th>Fecha</th><th>Colaborador</th><th>Departamento</th><th>Puesto</th><th>Tipo</th><th>Turno</th><th>Incidencia</th>'
+    +'</tr></thead><tbody>';
+
+  var STATUS_L2={'FALTA':'Falta','LLEGA TARDE >10':'Llega Tarde >10','LLEGA TARDE <10':'Llega Tarde <10',
+    'RET. >10':'Llega Tarde >10','RET. <10':'Llega Tarde <10','PSG':'Permiso Sin Goce',
+    'PCG':'Permiso Con Goce','P. ENTRADA TARDE':'P. Entrada Tarde',
+    'INCAPACIDAD':'Incapacidad','CASTIGO':'Castigo'};
+  var TURN_S2={'1':'T1 07-15','2':'T2 15-23','3':'T3 23-07','mix':'MIX'};
+  var detRows = [];
+  arr.forEach(function(p) {
+    (p.detalle||[]).sort(function(a,b){return a.fecha.localeCompare(b.fecha);}).forEach(function(d,i) {
+      var fp=d.fecha.split('-'); var ff=fp[2]+'/'+fp[1]+'/'+fp[0];
+      var color='#0f172a';
+      if(d.status==='FALTA') color='#dc2626';
+      else if(d.status.indexOf('TARDE')>=0||d.status.indexOf('RET.')>=0) color='#d97706';
+      else if(d.status==='INCAPACIDAD') color='#7c3aed';
+      else if(d.status==='CASTIGO') color='#991b1b';
+      detRows.push('<tr style="background:'+(detRows.length%2===0?'#f8fafc':'#fff')+'">'
+        +'<td style="padding:4px 8px;border-bottom:1px solid #f1f5f9;white-space:nowrap">'+ff+'</td>'
+        +'<td style="padding:4px 8px;border-bottom:1px solid #f1f5f9;font-weight:600;font-size:10px">'+p.name+'</td>'
+        +'<td style="padding:4px 8px;border-bottom:1px solid #f1f5f9"><span style="background:'+p.color+'22;color:'+p.color+';padding:1px 5px;border-radius:3px;font-size:9px;font-weight:700">'+p.planta+'</span></td>'
+        +'<td style="padding:4px 8px;border-bottom:1px solid #f1f5f9;font-size:9px;color:#64748b">'+p.puesto+'</td>'
+        +'<td style="padding:4px 8px;border-bottom:1px solid #f1f5f9;font-size:9px">'+p.tipo+'</td>'
+        +'<td style="padding:4px 8px;border-bottom:1px solid #f1f5f9;font-size:9px;color:#64748b">'+(TURN_S2[String(d.turno)]||'T'+d.turno)+'</td>'
+        +'<td style="padding:4px 8px;border-bottom:1px solid #f1f5f9;font-weight:600;color:'+color+';">'+(STATUS_L2[d.status]||d.status)+'</td>'
+        +'</tr>');
+    });
+  });
+  html += detRows.join('') + '</tbody></table></div>';
+  html += '</body></html>';
+
+  // Abrir ventana de impresión
+  var win = window.open('', '_blank', 'width=900,height=700');
+  win.document.write(html);
+  win.document.close();
+  win.focus();
+  setTimeout(function() { win.print(); }, 800);
 }
 
 function abrirModalDescarga() {
