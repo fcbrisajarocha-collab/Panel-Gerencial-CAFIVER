@@ -1037,6 +1037,8 @@ function renderSesTable(pd) {
 /* ── TOP COLABORADORES ── */
 // Variable global para filtro de colaboradores
 let _topAllData = [];
+let _topRowIdx = 0;
+let _topArrRef = [];
 
 const TIPO_PUESTO = {
   // SINDICALIZADOS
@@ -1235,6 +1237,30 @@ function exportarIncidenciasExcel(plantasSelec) {
 
   function q2(v){ return '"' + String(v||'').replace(/"/g,'""') + '"'; }
 
+  function buildDetalle(datos, nombreDept) {
+    var lines = [];
+    lines.push(q2('CAFIVER - Detalle de Incidencias - ' + nombreDept));
+    lines.push(q2('Periodo') + ',' + q2(periodo));
+    lines.push(q2('Generado') + ',' + q2(hoy));
+    lines.push('');
+    lines.push([q2('Fecha'),q2('Colaborador'),q2('Departamento'),q2('Puesto'),q2('Tipo'),q2('Turno'),q2('Incidencia')].join(','));
+    var TURN_S = {'1':'T1 07:00-15:00','2':'T2 15:00-23:00','3':'T3 23:00-07:00','mix':'MIX'};
+    var STATUS_L = {
+      'FALTA':'Falta','LLEGA TARDE >10':'Llega Tarde >10','LLEGA TARDE <10':'Llega Tarde <10',
+      'RET. >10':'Llega Tarde >10','RET. <10':'Llega Tarde <10',
+      'PSG':'Permiso Sin Goce','PCG':'Permiso Con Goce','P. ENTRADA TARDE':'P. Entrada Tarde',
+      'INCAPACIDAD':'Incapacidad','CASTIGO':'Castigo'
+    };
+    datos.forEach(function(p) {
+      (p.detalle||[]).sort(function(a,b){return a.fecha.localeCompare(b.fecha);}).forEach(function(d) {
+        var fp=d.fecha.split('-'); var ff=fp[2]+'/'+fp[1]+'/'+fp[0];
+        lines.push([q2(ff),q2(p.name),q2(p.planta),q2(p.puesto),q2(p.tipo||'Sindicalizado'),
+          q2(TURN_S[String(d.turno)]||'T'+d.turno),q2(STATUS_L[d.status]||d.status)].join(','));
+      });
+    });
+    return lines.join('\n');
+  }
+
   function buildSheet(datos, nombreDept) {
     var lines = [];
     lines.push(q2('CAFIVER - Reporte de Incidencias - ' + nombreDept));
@@ -1298,15 +1324,75 @@ function exportarIncidenciasExcel(plantasSelec) {
 
   if (!plantasSelec || plantasSelec[0] === '__todos__') {
     descargar(csvGeneral, 'Incidencias_' + (dept||'General') + '_' + fecha + '.csv');
+    setTimeout(function() {
+      descargar(buildDetalle(arr, dept||'General'), 'Detalle_Incidencias_' + (dept||'General') + '_' + fecha + '.csv');
+    }, 600);
   } else {
     plantasSelec.forEach(function(pl, i) {
       setTimeout(function() {
         if (csvsPorPlanta[pl]) {
           descargar(csvsPorPlanta[pl], 'Incidencias_' + pl + '_' + fecha + '.csv');
+          setTimeout(function() {
+            var datosPl = arr.filter(function(p){ return p.planta === pl; });
+            descargar(buildDetalle(datosPl, pl), 'Detalle_Incidencias_' + pl + '_' + fecha + '.csv');
+          }, 400);
         }
-      }, i * 600);
+      }, i * 1200);
     });
   }
+}
+
+
+function verFechasIncidencias(el, idx) {
+  var prev = document.getElementById('fechas-popup');
+  if (prev) { prev.remove(); if (prev._srcEl === el) return; }
+  var p = _topArrRef[idx];
+  if (!p) return;
+  var detalle = p.detalle || [];
+  if (!detalle.length) { alert('No hay detalle de fechas disponible para ' + p.name); return; }
+  var TURN_SHORT = {'1':'T1 07:00-15:00','2':'T2 15:00-23:00','3':'T3 23:00-07:00','mix':'MIX'};
+  var STATUS_LABEL = {
+    'FALTA':'Falta','LLEGA TARDE >10':'Llega Tarde >10','LLEGA TARDE <10':'Llega Tarde <10',
+    'RET. >10':'Llega Tarde >10','RET. <10':'Llega Tarde <10',
+    'PSG':'Permiso Sin Goce','PCG':'Permiso Con Goce','P. ENTRADA TARDE':'P. Entrada Tarde',
+    'INCAPACIDAD':'Incapacidad','CASTIGO':'Castigo'
+  };
+  detalle.sort(function(a,b){ return a.fecha.localeCompare(b.fecha); });
+  var rows = detalle.map(function(d) {
+    var fp=d.fecha.split('-'); var ff=fp[2]+'/'+fp[1]+'/'+fp[0];
+    var lbl=STATUS_LABEL[d.status]||d.status;
+    var color=d.status.indexOf('FALTA')>=0?'#dc2626':d.status.indexOf('TARDE')>=0||d.status.indexOf('RET.')>=0?'#d97706':'#7c3aed';
+    return '<tr>'
+      +'<td style="padding:5px 10px;font-size:12px;border-bottom:1px solid #f1f5f9;white-space:nowrap">'+ff+'</td>'
+      +'<td style="padding:5px 10px;font-size:11px;color:#64748b;border-bottom:1px solid #f1f5f9">'+(TURN_SHORT[String(d.turno)]||'T'+d.turno)+'</td>'
+      +'<td style="padding:5px 10px;font-size:11px;font-weight:600;color:'+color+';border-bottom:1px solid #f1f5f9">'+lbl+'</td>'
+      +'</tr>';
+  }).join('');
+  var popup=document.createElement('div');
+  popup.id='fechas-popup'; popup._srcEl=el;
+  popup.style.cssText='position:fixed;z-index:700;background:#fff;border:1px solid #e2e8f0;border-radius:10px;box-shadow:0 8px 32px rgba(0,0,0,.18);min-width:320px;max-height:320px;overflow-y:auto;font-family:DM Sans,sans-serif';
+  popup.innerHTML='<div style="padding:10px 14px;background:#0f172a;border-radius:10px 10px 0 0;display:flex;justify-content:space-between;align-items:center">'
+    +'<div style="font-size:12px;font-weight:700;color:#fff">📅 '+p.name+'</div>'
+    +'<button id="fp-close" style="background:rgba(255,255,255,.15);border:none;color:#fff;width:22px;height:22px;border-radius:50%;cursor:pointer;font-size:12px">✕</button>'
+    +'</div>'
+    +'<table style="width:100%;border-collapse:collapse">'
+    +'<thead><tr style="background:#f8fafc">'
+    +'<th style="padding:6px 10px;font-size:10px;color:#64748b;text-align:left;font-weight:600">FECHA</th>'
+    +'<th style="padding:6px 10px;font-size:10px;color:#64748b;text-align:left;font-weight:600">TURNO</th>'
+    +'<th style="padding:6px 10px;font-size:10px;color:#64748b;text-align:left;font-weight:600">INCIDENCIA</th>'
+    +'</tr></thead><tbody>'+rows+'</tbody></table>';
+  document.body.appendChild(popup);
+  var rect=el.getBoundingClientRect();
+  var left=Math.min(rect.left, window.innerWidth-336);
+  var top=rect.bottom+6;
+  if(top+320>window.innerHeight) top=rect.top-330;
+  popup.style.left=Math.max(8,left)+'px'; popup.style.top=top+'px';
+  document.getElementById('fp-close').onclick=function(){popup.remove();};
+  setTimeout(function(){
+    document.addEventListener('click',function h(e){
+      if(!popup.contains(e.target)&&e.target!==el){popup.remove();document.removeEventListener('click',h);}
+    });
+  },100);
 }
 
 function renderTopRows(arr) {
@@ -1318,8 +1404,10 @@ function renderTopRows(arr) {
     return;
   }
   if(cnt) cnt.textContent = arr.length + ' colaborador' + (arr.length!==1?'es':'') + ' · ' + arr.reduce((a,p)=>a+p.total,0) + ' incidencias totales';
+  _topRowIdx = 0;
+  _topArrRef = arr;
   tb.innerHTML = arr.map(p=>`<tr>
-    <td style="font-weight:600">${p.name}</td>
+    <td style="font-weight:600"><span style="cursor:pointer;text-decoration:underline dotted;color:#1d4ed8" onclick="verFechasIncidencias(this,${_topRowIdx++})" title="Ver fechas · click para ver">${p.name}</span></td>
     <td><span style="font-size:10px;font-weight:700;padding:2px 7px;border-radius:6px;background:${p.color}22;color:${p.color}">${p.planta}</span></td>
     <td style="font-size:11px;color:var(--tx3)">${p.puesto}</td>
     <td><span style="font-size:10px;font-weight:700;padding:2px 7px;border-radius:6px;background:${p.tipo==='No Sindicalizado'?'#fef9c3':'#dbeafe'};color:${p.tipo==='No Sindicalizado'?'#854d0e':'#1d4ed8'}">${p.tipo||'—'}</span></td>
@@ -1353,7 +1441,7 @@ function renderTopColaboradores(pd) {
         if (!isFalta&&!isRetardo&&!isPermiso&&!isIncap&&!isCastigo) return;
         const cat = p.catalog.find(x=>x.id===m.catId) || p.catalog.find(x=>x.ctrl===m.catId) || p.catalog.find(x=>m.catId && m.catId.endsWith('_'+x.ctrl));
         const key = p.id+'_'+m.catId;
-        if (!byPerson[key]) byPerson[key] = { name:cat?.name||'—', planta:p.nombre, color:p.color, puesto:cat?.puesto||'—', tipo:getTipo(cat?.puesto||'', cat?.ctrl||''), falta:0,retardo:0,permiso:0,incap:0,castigo:0,vacacion:0,no:0,total:0 };
+        if (!byPerson[key]) byPerson[key] = { name:cat?.name||'—', planta:p.nombre, color:p.color, puesto:cat?.puesto||'—', tipo:getTipo(cat?.puesto||'', cat?.ctrl||''), falta:0,retardo:0,permiso:0,incap:0,castigo:0,vacacion:0,no:0,total:0, detalle:[] };
         if (isFalta)    { byPerson[key].falta++;    byPerson[key].total++; }
         if (isRetardo)  { byPerson[key].retardo++;  byPerson[key].total++; }
         if (isPermiso)  { byPerson[key].permiso++;  byPerson[key].total++; }
@@ -1361,6 +1449,10 @@ function renderTopColaboradores(pd) {
         if (isCastigo)  { byPerson[key].castigo++;  byPerson[key].total++; }
         if (isVacacion) { byPerson[key].vacacion++; byPerson[key].total++; }
         if (isNo)       { byPerson[key].no++;       byPerson[key].total++; }
+        // Guardar detalle de cada incidencia con fecha y turno
+        if (isFalta||isRetardo||isPermiso||isIncap||isCastigo) {
+          byPerson[key].detalle.push({ fecha: s.date, turno: s.turno, status: m.status });
+        }
       });
     });
   });
